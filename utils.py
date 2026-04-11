@@ -65,51 +65,89 @@ CATEGORY_NAME_MAP = {
 }
 
 
+_TABLE_CATS = r'(?:교육|보호|문화|정서지원|지역사회연계|기타)'
+_REQUIRED_CAT_SET = {"교육", "보호", "문화", "정서지원", "지역사회연계"}
+
+
 def extract_program_classifications(text: str) -> list:
-    """텍스트에서 '사업분류' 필드를 파싱하여 대분류/중분류/프로그램명 목록 반환.
+    """텍스트에서 프로그램 사업분류를 파싱하여 대분류/중분류/프로그램명 목록 반환.
 
     지원 형식:
-      사업분류 교육프로그램(특기적성)>파랑새 중창
-      사업분류: 보호프로그램(생활)>급식관리
+      [형식1] 사업분류 교육프로그램(특기적성)>파랑새 중창
+      [형식2] 교육 | 특기적성 | 파랑새 중창 | ...  (DOCX 테이블)
+      [형식3] 교육프로그램(특기적성)>파랑새 중창  (사업분류 레이블 없이)
     """
     results = []
-    pattern = re.compile(
-        r'사업분류\s*[:\s]*'
-        r'([가-힣A-Za-z0-9\s]+?)'
-        r'\(([가-힣A-Za-z0-9\s]+?)\)'
-        r'\s*[>→/]\s*'
-        r'([^\n\r]{1,80})',
+    seen = set()
+
+    def _map_big(raw: str):
+        raw = raw.strip()
+        if raw in CATEGORY_NAME_MAP:
+            return CATEGORY_NAME_MAP[raw]
+        for key, val in CATEGORY_NAME_MAP.items():
+            if key in raw:
+                return val
+        return None
+
+    def _add(big_cat, mid_cat, prog_name):
+        prog_name = prog_name.strip().rstrip("|").strip()
+        if big_cat in _REQUIRED_CAT_SET and prog_name and (big_cat, prog_name) not in seen:
+            seen.add((big_cat, prog_name))
+            results.append({"big_category": big_cat, "mid_category": mid_cat.strip(), "program_name": prog_name})
+
+    # 형식1: 사업분류 교육프로그램(특기적성)>파랑새 중창
+    p1 = re.compile(
+        r'사업분류\s*[:\s]*([가-힣A-Za-z0-9\s]+?)\(([가-힣A-Za-z0-9\s]+?)\)\s*[>→/]\s*([^\n\r]{1,80})',
         re.MULTILINE
     )
-    for m in pattern.finditer(text):
-        raw_big = m.group(1).strip()
-        mid_cat = m.group(2).strip()
-        prog_name = m.group(3).strip()
-        big_cat = CATEGORY_NAME_MAP.get(raw_big, None)
-        if not big_cat:
-            for key, val in CATEGORY_NAME_MAP.items():
-                if key in raw_big:
-                    big_cat = val
-                    break
+    for m in p1.finditer(text):
+        big_cat = _map_big(m.group(1))
         if big_cat:
-            results.append({
-                "big_category": big_cat,
-                "mid_category": mid_cat,
-                "program_name": prog_name,
-            })
+            _add(big_cat, m.group(2), m.group(3))
+
+    # 형식2: DOCX 테이블 파이프 구분 — "교육 | 특기적성 | 파랑새 중창 | ..."
+    p2 = re.compile(
+        rf'^({_TABLE_CATS})\s*\|[ \t]*([^|\n\r]*?)[ \t]*\|[ \t]*([^|\n\r]{{1,60}})',
+        re.MULTILINE
+    )
+    for m in p2.finditer(text):
+        big_cat = _map_big(m.group(1))
+        if big_cat in _REQUIRED_CAT_SET:
+            _add(big_cat, m.group(2), m.group(3))
+
+    # 형식3: 사업분류 레이블 없이 "교육프로그램(특기적성)>파랑새 중창"
+    p3 = re.compile(
+        r'([가-힣A-Za-z]+프로그램)\(([가-힣A-Za-z0-9\s]+?)\)\s*[>→/]\s*([^\n\r]{1,80})',
+        re.MULTILINE
+    )
+    for m in p3.finditer(text):
+        big_cat = _map_big(m.group(1))
+        if big_cat:
+            _add(big_cat, m.group(2), m.group(3))
+
     return results
 
 
 def get_detected_categories_from_summaries(file_summaries: list) -> list:
-    """파일 요약 목록에서 감지된 대분류 목록 반환 (순서 유지, 중복 제거)."""
+    """파일 요약 목록에서 감지된 대분류 목록 반환 (순서 유지, 중복 제거).
+    사업분류 파싱 결과가 없으면 전체 텍스트 키워드 감지로 fallback."""
     seen = set()
     ordered = []
+
+    # 1차: 사업분류 파싱 결과
     for summary in file_summaries:
         for cls in summary.get("program_classifications", []):
             cat = cls["big_category"]
             if cat not in seen:
                 seen.add(cat)
                 ordered.append(cat)
+
+    # 2차 fallback: 파싱 결과 없으면 full_text 키워드 감지
+    if not ordered:
+        combined_text = " ".join(s.get("full_text", s.get("text_preview", "")) for s in file_summaries)
+        ordered = detect_categories_in_text(combined_text)
+        print(f"[사업분류 fallback] 키워드 감지 결과: {ordered}")
+
     return ordered
 
 MONTH_PATTERNS = [
@@ -393,7 +431,8 @@ def extract_file_summaries(uploaded_files: list) -> list:
             "text_length": len(file_text),
             "labels": labels,
             "program_classifications": program_classifications,
-            "text_preview": file_text[:500] if len(file_text) > 500 else file_text
+            "text_preview": file_text[:500] if len(file_text) > 500 else file_text,
+            "full_text": file_text,
         }
         summaries.append(summary)
     
@@ -419,7 +458,7 @@ def summaries_to_compact_text(summaries: list) -> str:
                     lines.append(
                         f"    - {cls['big_category']} / {cls['mid_category']} / {prog}"
                     )
-        lines.append(f"  미리보기: {s.get('text_preview', '')[:200]}...")
+        lines.append(f"  미리보기: {s.get('text_preview', '')[:400]}...")
         lines.append("")
     return "\n".join(lines)
 
