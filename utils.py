@@ -915,9 +915,21 @@ def generate_part2(compact_text: str, detected_categories: list = None) -> dict:
     schema_lines = []
     for cat in REQUIRED_CATEGORIES:
         subs = CATEGORY_SUBCATEGORIES.get(cat, [])
+        first_sub = subs[0] if subs else cat
         if cat in present_cats:
             schema_lines.append(
-                f'  "{cat}": {{"subcategories": {subs}, "detail_table": [...실제 데이터...], "eval_table": [...실제 데이터...]}}'
+                f'  "{cat}": {{'
+                f'"subcategories": {subs}, '
+                f'"detail_table": [{{'
+                f'"sub_area": "{first_sub}", '
+                f'"program_name": "프로그램명", "expected_effect": "기대효과(100자 이상)", '
+                f'"target": "대상아동", "count": "인원수", "cycle": "주기", "content": "● 세부내용"'
+                f'}}], '
+                f'"eval_table": [{{'
+                f'"sub_area": "{first_sub}", '
+                f'"program_name": "프로그램명", "expected_effect": "● 기대효과", '
+                f'"main_plan": "주요평가계획", "eval_method": "평가방법"'
+                f'}}]}}'
             )
         else:
             schema_lines.append(
@@ -942,12 +954,13 @@ def generate_part2(compact_text: str, detected_categories: list = None) -> dict:
 [필수 규칙]
 1. 위 '파일에서 확인된 사업분류 대분류'에 해당하는 카테고리만 detail_table과 eval_table을 작성하세요.
 2. '파일에 없는 대분류'는 반드시 detail_table: [], eval_table: [] 로 출력하세요.
-3. 절대 임의로 프로그램을 만들지 마세요. 파일의 사업분류에 있는 프로그램명을 그대로 사용하세요.
+3. 파일의 사업분류에 있는 프로그램명을 우선 사용하세요. 파일에 없을 경우 적절한 프로그램을 작성하세요.
+4. detail_table 각 행은 반드시 sub_area, program_name, expected_effect, target, count, cycle, content 필드를 포함하세요.
+5. eval_table 각 행은 반드시 sub_area, program_name, expected_effect, main_plan, eval_method 필드를 포함하세요.
+6. 각 확인된 카테고리당 detail_table 최소 2행 이상, eval_table 최소 2행 이상 작성하세요.
 
 출력 스키마 (5개 카테고리 키 모두 포함):
-{schema_json}
-
-각 확인된 카테고리당 detail_table 최대 5행, eval_table 최대 5행."""
+{schema_json}"""
 
     try:
         return safe_gemini_json(prompt, system_instruction, max_retries=2)
