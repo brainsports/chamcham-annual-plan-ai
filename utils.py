@@ -1665,17 +1665,37 @@ CATEGORY_SUBCATEGORIES = {
 }
 
 
+PLACEHOLDER_NAMES = {
+    "프로그램명", "해당사항 없음", "program_name", "", "프로그램 없음",
+    "해당없음", "없음", "N/A", "n/a",
+}
+
+
+def _is_placeholder_row(row: dict) -> bool:
+    """행이 실제 데이터 없이 템플릿 기본값만 있는지 확인."""
+    name = str(row.get("program_name", "")).strip()
+    return name in PLACEHOLDER_NAMES or not name
+
+
 def get_missing_categories(part2_programs: dict) -> list:
-    """part2_programs에서 누락된 대분류 목록 반환."""
+    """part2_programs에서 누락되었거나 실질 데이터가 없는 대분류 목록 반환."""
     missing = []
     for cat in REQUIRED_CATEGORIES:
         cat_data = part2_programs.get(cat)
-        if not cat_data:
+        if not cat_data or not isinstance(cat_data, dict):
             missing.append(cat)
-        elif isinstance(cat_data, dict):
-            detail = cat_data.get("detail_table", [])
-            if not detail:
-                missing.append(cat)
+            continue
+
+        detail = cat_data.get("detail_table", [])
+        if not detail:
+            missing.append(cat)
+            continue
+
+        real_rows = [r for r in detail
+                     if isinstance(r, dict) and not _is_placeholder_row(r)]
+        if not real_rows:
+            missing.append(cat)
+
     return missing
 
 
