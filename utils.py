@@ -424,7 +424,18 @@ def extract_file_summaries(uploaded_files: list) -> list:
             continue
         
         labels = extract_labels_from_text(file_text)
+
+        # 디버그: 보호 관련 라인 출력
+        boho_lines = [ln for ln in file_text.splitlines() if '보호' in ln]
+        if boho_lines:
+            print(f"[디버그] '보호' 포함 라인 ({len(boho_lines)}개, 첫5개):")
+            for ln in boho_lines[:5]:
+                print(f"  repr: {repr(ln[:120])}")
+        else:
+            print("[디버그] 파일에 '보호' 텍스트 없음")
+
         program_classifications = extract_program_classifications(file_text)
+        print(f"[디버그] program_classifications: {program_classifications}")
         
         summary = {
             "filename": uf.name,
