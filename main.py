@@ -35,7 +35,9 @@ from utils import (get_gemini_analysis, get_default_data, read_uploaded_file,
                    summaries_to_compact_text, get_partitioned_analysis,
                    load_guideline_rules, count_chars_no_space,
                    bucket_programs_by_month, apply_guidelines_to_analysis,
-                   get_missing_categories, generate_part2_for_categories)
+                   get_missing_categories, generate_part2_for_categories,
+                   generate_part1, generate_part3, generate_part4,
+                   ensure_feedback_table_complete)
 from doc_utils import (generate_part1_report, generate_part2_report,
                        generate_monthly_report,
                        generate_monthly_program_report,
@@ -573,21 +575,71 @@ else:
                              type="primary",
                              use_container_width=True,
                              key="supplement_analyze_btn"):
-                    with st.spinner("누락 영역 보완 분석 중..."):
+                    with st.spinner("누락 영역 보완 분석 중... (Part 1~4 모두 반영)"):
                         supp_summaries = extract_file_summaries(supplement_files)
                         supp_compact = summaries_to_compact_text(supp_summaries)
+                        guideline_rules = st.session_state.get('guideline_rules', {})
 
+                        any_updated = False
+
+                        # ── Part 2 보완 ──
                         new_cat_data = generate_part2_for_categories(
                             supp_compact, missing_cats
                         )
-
                         if new_cat_data:
                             for cat in missing_cats:
                                 if cat in new_cat_data:
                                     data['part2_programs'][cat] = new_cat_data[cat]
+                            any_updated = True
+
+                        # ── Part 1 보완: feedback_table 누락 행 채우기 ──
+                        new_p1 = generate_part1(supp_compact, detected_categories=missing_cats)
+                        if new_p1:
+                            new_fb = new_p1.get('feedback_table', [])
+                            existing_fb = data.get('part1_general', {}).get('feedback_table', [])
+                            existing_by_area = {row.get('area', ''): row for row in existing_fb if isinstance(row, dict)}
+                            for row in new_fb:
+                                area = row.get('area', '')
+                                if area in missing_cats and isinstance(row, dict):
+                                    existing_by_area[area] = row
+                            merged_order = ["보호", "교육", "문화", "정서지원", "지역사회연계"]
+                            merged_fb = [existing_by_area[a] for a in merged_order if a in existing_by_area]
+                            if 'part1_general' not in data:
+                                data['part1_general'] = {}
+                            data['part1_general']['feedback_table'] = ensure_feedback_table_complete(merged_fb)
+                            any_updated = True
+
+                        # ── Part 3 보완: 상반기 월별계획에 누락 카테고리 프로그램 추가 ──
+                        new_p3 = generate_part3(supp_compact, detected_categories=missing_cats)
+                        if new_p3 and isinstance(new_p3, dict):
+                            existing_p3 = data.get('part3_monthly_plan', {})
+                            for month in [f"{m}월" for m in range(1, 7)]:
+                                new_progs = new_p3.get(month, [])
+                                if new_progs:
+                                    existing_progs = existing_p3.get(month, [])
+                                    existing_p3[month] = existing_progs + new_progs
+                            data['part3_monthly_plan'] = existing_p3
+                            any_updated = True
+
+                        # ── Part 4 보완: 하반기 월별계획에 누락 카테고리 프로그램 추가 ──
+                        new_p4 = generate_part4(supp_compact, detected_categories=missing_cats,
+                                                guideline_rules=guideline_rules)
+                        if new_p4 and isinstance(new_p4, dict):
+                            existing_p4 = data.get('part4_monthly_plan', {})
+                            # generate_part4 returns {"monthly_plan": {...}, ...}
+                            # but data['part4_monthly_plan'] stores months directly
+                            new_monthly = new_p4.get('monthly_plan', new_p4)
+                            for month in [f"{m}월" for m in range(7, 13)]:
+                                new_progs = new_monthly.get(month, [])
+                                if new_progs:
+                                    existing_p4[month] = existing_p4.get(month, []) + new_progs
+                            data['part4_monthly_plan'] = existing_p4
+                            any_updated = True
+
+                        if any_updated:
                             st.session_state.analysis_data = data
                             st.success(
-                                f"✅ 보완 완료! ({', '.join(missing_cats)} 영역 추가됨)"
+                                f"✅ 보완 완료! ({', '.join(missing_cats)} 영역이 Part 1~4에 모두 반영됨)"
                             )
                             st.rerun()
                         else:
