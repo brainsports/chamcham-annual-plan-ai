@@ -424,18 +424,10 @@ def extract_file_summaries(uploaded_files: list) -> list:
             continue
         
         labels = extract_labels_from_text(file_text)
-
-        # 디버그: 보호 관련 라인 출력
-        boho_lines = [ln for ln in file_text.splitlines() if '보호' in ln]
-        if boho_lines:
-            print(f"[디버그] '보호' 포함 라인 ({len(boho_lines)}개, 첫5개):")
-            for ln in boho_lines[:5]:
-                print(f"  repr: {repr(ln[:120])}")
-        else:
-            print("[디버그] 파일에 '보호' 텍스트 없음")
-
         program_classifications = extract_program_classifications(file_text)
-        print(f"[디버그] program_classifications: {program_classifications}")
+        if program_classifications:
+            cats = list({c["big_category"] for c in program_classifications})
+            print(f"[사업분류 추출] {uf.name}: {cats} ({len(program_classifications)}개 프로그램)")
         
         summary = {
             "filename": uf.name,
@@ -776,8 +768,21 @@ def safe_gemini_json(prompt: str, system_instruction: str = None, max_retries: i
     raise ValueError(f"JSON 파싱 최종 실패. 원문:\n{last_raw_text[:2000]}")
 
 
-def generate_part1(compact_text: str) -> dict:
-    """Part1 총괄/기획 영역만 생성."""
+def generate_part1(compact_text: str, detected_categories: list = None) -> dict:
+    """Part1 총괄/기획 영역만 생성. detected_categories: 파일에 실제로 있는 대분류 목록."""
+    all_cats = ["보호", "교육", "문화", "정서지원", "지역사회연계"]
+    present = detected_categories if detected_categories else all_cats
+    present_str = "/".join(present)
+
+    feedback_schema_rows = "\n".join(
+        f'    {{"area": "{cat}", "problem": "● 전년도 문제점", "improvement": "● 개선방안"}}'
+        for cat in present
+    )
+    cat_rule = (
+        f"\n[필수] feedback_table은 아래 {len(present)}개 영역만 작성 (파일에 없는 영역은 작성 금지):\n"
+        f"  {present_str}"
+    ) if detected_categories else ""
+
     system_instruction = """당신은 연간 사업계획서 작성 전문가입니다.
 한국어로 작성하고, 이모지 사용 금지, ● 기호만 사용하세요.
 출력: 오직 JSON 객체 1개만. 마크다운/코드펜스 금지."""
@@ -785,6 +790,7 @@ def generate_part1(compact_text: str) -> dict:
     prompt = f"""다음 파일 요약을 기반으로 Part1 (총괄/기획) JSON을 생성하세요.
 
 {compact_text}
+{cat_rule}
 
 출력 스키마:
 {{
@@ -793,7 +799,7 @@ def generate_part1(compact_text: str) -> dict:
   "need_2_2_environment": "주변환경 (400자)",
   "need_2_3_educational": "교육적 특성 (400자)",
   "feedback_table": [
-    {{"area": "보호/교육/문화/정서지원/지역사회연계", "problem": "문제점 3개", "improvement": "개선방안 3개"}}
+{feedback_schema_rows}
   ],
   "total_review_table": [
     {{"category": "운영평가/아동평가/프로그램평가/후원활동측면/환류방안", "content": "상세 내용"}}
@@ -809,7 +815,7 @@ def generate_part1(compact_text: str) -> dict:
 }}
 
 [중요] 각 필드 600자 이내, 테이블 각 5행 이내로 제한."""
-    
+
     try:
         return safe_gemini_json(prompt, system_instruction, max_retries=2)
     except ValueError:
@@ -930,7 +936,8 @@ def generate_part2(compact_text: str, detected_categories: list = None) -> dict:
         return None
 
 
-def generate_part3(compact_text: str, month_bucket: dict = None, guideline_rules: dict = None) -> dict:
+def generate_part3(compact_text: str, month_bucket: dict = None, guideline_rules: dict = None,
+                   detected_categories: list = None) -> dict:
     """Part3 상반기 월별계획 (1~6월) 생성. month_bucket이 있으면 해당 월에 배치."""
     
     rules = guideline_rules.get('part3', {}).get('monthly_program', {}) if guideline_rules else {}
@@ -958,7 +965,15 @@ def generate_part3(compact_text: str, month_bucket: dict = None, guideline_rules
             if progs:
                 prog_names = ", ".join([p['program_name'] for p in progs])
                 pre_bucket_info += f"  {month}: {prog_names}\n"
-    
+
+    present = detected_categories if detected_categories else ["교육"]
+    present_str = ", ".join(present)
+    ex_cat = present[0]
+    cat_rule = (
+        f"\n[필수] 월별 계획에는 아래 대분류의 프로그램만 포함하세요 (그 외 대분류는 절대 추가 금지):\n"
+        f"  허용 대분류: {present_str}"
+    ) if detected_categories else ""
+
     system_instruction = """당신은 사업계획 일정 전문가입니다.
 한국어, 이모지 금지, ● 기호만 사용.
 출력: 오직 JSON 객체 1개만."""
@@ -967,11 +982,12 @@ def generate_part3(compact_text: str, month_bucket: dict = None, guideline_rules
 
 {compact_text}
 {pre_bucket_info}
+{cat_rule}
 
 출력 스키마:
 {{
   "1월": [
-    {{"big_category": "보호", "mid_category": "생활", "program_name": "급식관리", "target": "전체아동", "staff": "돌봄교사", "content": "● 내용"}}
+    {{"big_category": "{ex_cat}", "mid_category": "소분류", "program_name": "프로그램명", "target": "전체아동", "staff": "돌봄교사", "content": "● 내용"}}
   ],
   "2월": [...],
   "3월": [...],
@@ -983,7 +999,7 @@ def generate_part3(compact_text: str, month_bucket: dict = None, guideline_rules
 [중요] 
 - 각 월당 프로그램 {max_programs}개 이내
 - 각 content {content_max}자 (공백 제외) 이내
-- 빈 월이 있으면 "일상생활지도" 등 정기운영 프로그램 1개 이상 포함"""
+- 빈 월이 있으면 위 허용 대분류 중 정기운영 프로그램 1개 포함"""
     
     try:
         result = safe_gemini_json(prompt, system_instruction, max_retries=2)
@@ -997,7 +1013,8 @@ def generate_part3(compact_text: str, month_bucket: dict = None, guideline_rules
         return None
 
 
-def generate_part4(compact_text: str, month_bucket: dict = None, guideline_rules: dict = None) -> dict:
+def generate_part4(compact_text: str, month_bucket: dict = None, guideline_rules: dict = None,
+                   detected_categories: list = None) -> dict:
     """Part4 하반기 월별계획 (7~12월) + 예산/평가 생성. month_bucket이 있으면 해당 월에 배치."""
     
     rules = guideline_rules.get('part4', {}) if guideline_rules else {}
@@ -1028,7 +1045,16 @@ def generate_part4(compact_text: str, month_bucket: dict = None, guideline_rules
             if progs:
                 prog_names = ", ".join([p['program_name'] for p in progs])
                 pre_bucket_info += f"  {month}: {prog_names}\n"
-    
+
+    present = detected_categories if detected_categories else ["교육"]
+    present_str = ", ".join(present)
+    ex_cat = present[0]
+    cat_rule = (
+        f"\n[필수] 월별 계획에는 아래 대분류의 프로그램만 포함하세요 (그 외 대분류는 절대 추가 금지):\n"
+        f"  허용 대분류: {present_str}\n"
+        f"  feedback_summary도 위 허용 대분류만 작성 ({len(present)}행 이내)"
+    ) if detected_categories else ""
+
     system_instruction = """당신은 사업계획 일정 및 예산 전문가입니다.
 한국어, 이모지 금지, ● 기호만 사용.
 출력: 오직 JSON 객체 1개만."""
@@ -1037,11 +1063,12 @@ def generate_part4(compact_text: str, month_bucket: dict = None, guideline_rules
 
 {compact_text}
 {pre_bucket_info}
+{cat_rule}
 
 출력 스키마:
 {{
   "monthly_plan": {{
-    "7월": [{{"big_category": "보호", "mid_category": "생활", "program_name": "프로그램명", "target": "대상", "staff": "인력", "content": "● 내용"}}],
+    "7월": [{{"big_category": "{ex_cat}", "mid_category": "소분류", "program_name": "프로그램명", "target": "대상", "staff": "인력", "content": "● 내용"}}],
     "8월": [...],
     "9월": [...],
     "10월": [...],
@@ -1052,7 +1079,7 @@ def generate_part4(compact_text: str, month_bucket: dict = None, guideline_rules
     {{"category": "인건비", "amount": "50,000,000원", "details": "세부내용"}}
   ],
   "feedback_summary": [
-    {{"area": "보호", "problem": "문제점", "plan": "개선계획"}}
+    {{"area": "{ex_cat}", "problem": "문제점", "plan": "개선계획"}}
   ]
 }}
 
@@ -1814,7 +1841,8 @@ def get_partitioned_analysis(compact_text: str, progress_callback=None, month_bu
 
     if progress_callback:
         progress_callback("Part 1 (총괄/기획) 생성 중...")
-    part1 = generate_part1(compact_text)
+    _dc = detected_categories if detected_categories else None
+    part1 = generate_part1(compact_text, detected_categories=_dc)
     if part1:
         if 'satisfaction_survey' in part1:
             part1['satisfaction_survey'] = normalize_satisfaction_survey(part1.get('satisfaction_survey', {}))
@@ -1828,7 +1856,7 @@ def get_partitioned_analysis(compact_text: str, progress_callback=None, month_bu
     
     if progress_callback:
         progress_callback("Part 2 (세부사업) 생성 중...")
-    part2 = generate_part2(compact_text, detected_categories=detected_categories if detected_categories else None)
+    part2 = generate_part2(compact_text, detected_categories=_dc)
     if part2:
         result["part2_programs"] = part2
     else:
@@ -1836,7 +1864,8 @@ def get_partitioned_analysis(compact_text: str, progress_callback=None, month_bu
     
     if progress_callback:
         progress_callback("Part 3 (상반기 월별계획) 생성 중...")
-    part3 = generate_part3(compact_text, month_bucket=month_bucket, guideline_rules=guideline_rules)
+    part3 = generate_part3(compact_text, month_bucket=month_bucket,
+                           guideline_rules=guideline_rules, detected_categories=_dc)
     if part3:
         result["part3_monthly_plan"] = part3
     else:
@@ -1844,7 +1873,8 @@ def get_partitioned_analysis(compact_text: str, progress_callback=None, month_bu
     
     if progress_callback:
         progress_callback("Part 4 (하반기 + 예산/평가) 생성 중...")
-    part4 = generate_part4(compact_text, month_bucket=month_bucket, guideline_rules=guideline_rules)
+    part4 = generate_part4(compact_text, month_bucket=month_bucket,
+                           guideline_rules=guideline_rules, detected_categories=_dc)
     if part4:
         if "monthly_plan" in part4:
             result["part4_monthly_plan"] = part4["monthly_plan"]
