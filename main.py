@@ -34,7 +34,8 @@ from utils import (get_gemini_analysis, get_default_data, read_uploaded_file,
                    process_multiple_files, extract_file_summaries,
                    summaries_to_compact_text, get_partitioned_analysis,
                    load_guideline_rules, count_chars_no_space,
-                   bucket_programs_by_month, apply_guidelines_to_analysis)
+                   bucket_programs_by_month, apply_guidelines_to_analysis,
+                   get_missing_categories, generate_part2_for_categories)
 from doc_utils import (generate_part1_report, generate_part2_report,
                        generate_monthly_report,
                        generate_monthly_program_report,
@@ -539,6 +540,61 @@ else:
         if st.button("🔄 처음부터 다시", use_container_width=True):
             st.session_state.analysis_data = None
             st.rerun()
+
+        st.markdown("---")
+
+        # ── 누락 카테고리 감지 및 보완 업로드 UI ──
+        part2_now = data.get('part2_programs', {})
+        missing_cats = get_missing_categories(part2_now)
+
+        if missing_cats:
+            missing_str = ", ".join(f"**{c}**" for c in missing_cats)
+            st.warning(
+                f"⚠️ 누락된 영역이 있습니다\n\n"
+                f"다음 대분류의 정보가 부족합니다:\n{missing_str}\n\n"
+                f"해당 영역 관련 자료를 추가로 업로드하면 누락 영역만 보완 분석합니다."
+            )
+
+            supplement_files = st.file_uploader(
+                "추가 자료 업로드 (PDF, DOCX 등)",
+                type=['pdf', 'docx', 'txt', 'csv'],
+                accept_multiple_files=True,
+                label_visibility="collapsed",
+                key="supplement_uploader"
+            )
+
+            if supplement_files:
+                st.caption(f"✓ {len(supplement_files)}개 파일 선택됨")
+                for sf in supplement_files:
+                    st.caption(f"• {sf.name}")
+
+                if st.button("🔍 누락 영역만 보완 분석",
+                             type="primary",
+                             use_container_width=True,
+                             key="supplement_analyze_btn"):
+                    with st.spinner("누락 영역 보완 분석 중..."):
+                        supp_summaries = extract_file_summaries(supplement_files)
+                        supp_compact = summaries_to_compact_text(supp_summaries)
+
+                        new_cat_data = generate_part2_for_categories(
+                            supp_compact, missing_cats
+                        )
+
+                        if new_cat_data:
+                            for cat in missing_cats:
+                                if cat in new_cat_data:
+                                    data['part2_programs'][cat] = new_cat_data[cat]
+                            st.session_state.analysis_data = data
+                            st.success(
+                                f"✅ 보완 완료! ({', '.join(missing_cats)} 영역 추가됨)"
+                            )
+                            st.rerun()
+                        else:
+                            st.error(
+                                "보완 분석에 실패했습니다. 파일 내용을 확인하고 다시 시도해 주세요."
+                            )
+        else:
+            st.success("✅ 5개 영역 모두 분석 완료")
 
         st.markdown("---")
         st.caption("현재 분석 완료된 데이터를 수정하고 워드 파일로 다운로드하세요.")

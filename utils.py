@@ -1654,6 +1654,79 @@ def get_partitioned_analysis(compact_text: str, progress_callback=None, month_bu
     return result
 
 
+REQUIRED_CATEGORIES = ["보호", "교육", "문화", "정서지원", "지역사회연계"]
+
+CATEGORY_SUBCATEGORIES = {
+    "보호": ["생활", "안전", "가족기능강화"],
+    "교육": ["성장과권리", "학습", "특기적성"],
+    "문화": ["체험활동"],
+    "정서지원": ["상담"],
+    "지역사회연계": ["연계"],
+}
+
+
+def get_missing_categories(part2_programs: dict) -> list:
+    """part2_programs에서 누락된 대분류 목록 반환."""
+    missing = []
+    for cat in REQUIRED_CATEGORIES:
+        cat_data = part2_programs.get(cat)
+        if not cat_data:
+            missing.append(cat)
+        elif isinstance(cat_data, dict):
+            detail = cat_data.get("detail_table", [])
+            if not detail:
+                missing.append(cat)
+    return missing
+
+
+def generate_part2_for_categories(compact_text: str, categories: list) -> dict:
+    """지정된 카테고리만 Part2 데이터를 생성하여 반환."""
+    if not categories:
+        return {}
+
+    schema_parts = []
+    for cat in categories:
+        subs = CATEGORY_SUBCATEGORIES.get(cat, [])
+        subs_str = str(subs)
+        schema_parts.append(
+            f'  "{cat}": {{'
+            f'"subcategories": {subs_str}, '
+            f'"detail_table": [{{'
+            f'"sub_area": "{subs[0] if subs else cat}", '
+            f'"program_name": "프로그램명", "expected_effect": "기대효과", '
+            f'"target": "대상", "count": "인원", "cycle": "주기", "content": "● 내용"'
+            f'}}], '
+            f'"eval_table": [{{'
+            f'"sub_area": "{subs[0] if subs else cat}", '
+            f'"program_name": "프로그램명", "expected_effect": "● 효과", '
+            f'"main_plan": "주요계획", "eval_method": "평가방법"'
+            f'}}]}}'
+        )
+
+    schema_json = "{\n" + ",\n".join(schema_parts) + "\n}"
+    cats_str = ", ".join(categories)
+
+    system_instruction = """당신은 지역아동센터 프로그램 기획 전문가입니다.
+한국어로 작성, 이모지 금지, ● 기호만 사용.
+출력: 오직 JSON 객체 1개만."""
+
+    prompt = f"""다음 파일 요약을 기반으로 Part2 (세부사업) JSON을 생성하세요.
+누락된 영역: {cats_str}
+
+{compact_text}
+
+출력 스키마 ({len(categories)}개 카테고리만):
+{schema_json}
+
+[중요] 각 카테고리당 detail_table 3행, eval_table 3행 이내.
+위 카테고리({cats_str})에 해당하는 내용만 출력하세요."""
+
+    try:
+        return safe_gemini_json(prompt, system_instruction, max_retries=2)
+    except ValueError:
+        return None
+
+
 def parse_json_response(response_text: str) -> dict:
     """Parse JSON from Gemini response, removing markdown code blocks if present."""
     return _extract_json_from_text(response_text)
