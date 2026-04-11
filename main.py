@@ -392,9 +392,9 @@ def render_file_upload_section():
 
         month_bucket = bucket_programs_by_month(file_summaries)
 
-        return uploaded_files, upload_valid, compact_text, month_bucket
+        return uploaded_files, upload_valid, compact_text, month_bucket, file_summaries
 
-    return None, False, "", {}
+    return None, False, "", {}, []
 
 
 def render_sample_button():
@@ -425,7 +425,7 @@ if st.session_state.analysis_data is None:
 
     # 왼쪽 칼럼: 파일 업로드
     with left_col:
-        uploaded_files, upload_valid, compact_text, month_bucket = render_file_upload_section(
+        uploaded_files, upload_valid, compact_text, month_bucket, file_summaries = render_file_upload_section(
         )
 
         if uploaded_files and upload_valid:
@@ -453,7 +453,8 @@ if st.session_state.analysis_data is None:
                         compact_text,
                         progress_callback=update_progress,
                         month_bucket=month_bucket,
-                        guideline_rules=st.session_state.guideline_rules)
+                        guideline_rules=st.session_state.guideline_rules,
+                        file_summaries=file_summaries)
 
                     if result:
                         failed_parts = result.pop("_failed_parts", [])

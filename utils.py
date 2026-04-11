@@ -55,6 +55,63 @@ LABEL_PATTERNS = [
     (r'(?:영역|분류|카테고리)[:\s]*([^\n]{2,30})', 'category'),
 ]
 
+CATEGORY_NAME_MAP = {
+    "교육프로그램": "교육", "교육 프로그램": "교육", "교육": "교육",
+    "보호프로그램": "보호", "보호 프로그램": "보호", "보호": "보호",
+    "문화프로그램": "문화", "문화 프로그램": "문화", "문화": "문화",
+    "정서지원프로그램": "정서지원", "정서지원 프로그램": "정서지원", "정서지원": "정서지원",
+    "지역사회연계프로그램": "지역사회연계", "지역사회연계 프로그램": "지역사회연계",
+    "지역사회연계": "지역사회연계",
+}
+
+
+def extract_program_classifications(text: str) -> list:
+    """텍스트에서 '사업분류' 필드를 파싱하여 대분류/중분류/프로그램명 목록 반환.
+
+    지원 형식:
+      사업분류 교육프로그램(특기적성)>파랑새 중창
+      사업분류: 보호프로그램(생활)>급식관리
+    """
+    results = []
+    pattern = re.compile(
+        r'사업분류\s*[:\s]*'
+        r'([가-힣A-Za-z0-9\s]+?)'
+        r'\(([가-힣A-Za-z0-9\s]+?)\)'
+        r'\s*[>→/]\s*'
+        r'([^\n\r]{1,80})',
+        re.MULTILINE
+    )
+    for m in pattern.finditer(text):
+        raw_big = m.group(1).strip()
+        mid_cat = m.group(2).strip()
+        prog_name = m.group(3).strip()
+        big_cat = CATEGORY_NAME_MAP.get(raw_big, None)
+        if not big_cat:
+            for key, val in CATEGORY_NAME_MAP.items():
+                if key in raw_big:
+                    big_cat = val
+                    break
+        if big_cat:
+            results.append({
+                "big_category": big_cat,
+                "mid_category": mid_cat,
+                "program_name": prog_name,
+            })
+    return results
+
+
+def get_detected_categories_from_summaries(file_summaries: list) -> list:
+    """파일 요약 목록에서 감지된 대분류 목록 반환 (순서 유지, 중복 제거)."""
+    seen = set()
+    ordered = []
+    for summary in file_summaries:
+        for cls in summary.get("program_classifications", []):
+            cat = cls["big_category"]
+            if cat not in seen:
+                seen.add(cat)
+                ordered.append(cat)
+    return ordered
+
 MONTH_PATTERNS = [
     (r'(\d{1,2})월', 'month_num'),
     (r'(1|2|3|4|5|6|7|8|9|10|11|12)\s*월', 'month_num'),
@@ -329,11 +386,13 @@ def extract_file_summaries(uploaded_files: list) -> list:
             continue
         
         labels = extract_labels_from_text(file_text)
+        program_classifications = extract_program_classifications(file_text)
         
         summary = {
             "filename": uf.name,
             "text_length": len(file_text),
             "labels": labels,
+            "program_classifications": program_classifications,
             "text_preview": file_text[:500] if len(file_text) > 500 else file_text
         }
         summaries.append(summary)
@@ -349,6 +408,17 @@ def summaries_to_compact_text(summaries: list) -> str:
         for key, values in s.get('labels', {}).items():
             if values:
                 lines.append(f"  {key}: {', '.join(values[:3])}")
+        classifications = s.get("program_classifications", [])
+        if classifications:
+            lines.append("  [사업분류 추출 결과]")
+            seen_prog = set()
+            for cls in classifications:
+                prog = cls['program_name']
+                if prog not in seen_prog:
+                    seen_prog.add(prog)
+                    lines.append(
+                        f"    - {cls['big_category']} / {cls['mid_category']} / {prog}"
+                    )
         lines.append(f"  미리보기: {s.get('text_preview', '')[:200]}...")
         lines.append("")
     return "\n".join(lines)
@@ -755,25 +825,33 @@ def ensure_feedback_table_complete(feedback_table: list) -> list:
     return complete
 
 
-def generate_part2(compact_text: str) -> dict:
-    """Part2 세부사업 영역만 생성. 소스에 근거 있는 카테고리만 생성."""
-    present_cats = detect_categories_in_text(compact_text)
+def generate_part2(compact_text: str, detected_categories: list = None) -> dict:
+    """Part2 세부사업 영역만 생성.
+    detected_categories: 사업분류 파싱으로 확인된 대분류 목록 (없으면 키워드 감지 사용).
+    """
+    if detected_categories is not None and len(detected_categories) > 0:
+        present_cats = detected_categories
+    else:
+        present_cats = detect_categories_in_text(compact_text)
 
     if not present_cats:
-        present_cats = ["교육"]
+        present_cats = list(REQUIRED_CATEGORIES)
 
     schema_lines = []
-    for cat in ["보호", "교육", "문화", "정서지원", "지역사회연계"]:
-        subs = CATEGORY_SUBCATEGORIES.get(cat, []) if cat in CATEGORY_KEYWORDS else []
+    for cat in REQUIRED_CATEGORIES:
+        subs = CATEGORY_SUBCATEGORIES.get(cat, [])
         if cat in present_cats:
             schema_lines.append(
-                f'  "{cat}": {{"subcategories": {subs}, "detail_table": [...], "eval_table": [...]}}'
+                f'  "{cat}": {{"subcategories": {subs}, "detail_table": [...실제 데이터...], "eval_table": [...실제 데이터...]}}'
             )
         else:
-            schema_lines.append(f'  "{cat}": {{"subcategories": {subs}, "detail_table": [], "eval_table": []}}')
+            schema_lines.append(
+                f'  "{cat}": {{"subcategories": {subs}, "detail_table": [], "eval_table": []}}'
+            )
 
     schema_json = "{\n" + ",\n".join(schema_lines) + "\n}"
     present_str = ", ".join(present_cats)
+    absent_str = ", ".join([c for c in REQUIRED_CATEGORIES if c not in present_cats])
 
     system_instruction = """당신은 지역아동센터 프로그램 기획 전문가입니다.
 한국어로 작성, 이모지 금지, ● 기호만 사용.
@@ -783,15 +861,18 @@ def generate_part2(compact_text: str) -> dict:
 
 {compact_text}
 
-[중요 규칙]
-- 파일에 실제로 언급된 카테고리만 프로그램을 작성하세요: {present_str}
-- 파일에 언급되지 않은 카테고리는 반드시 detail_table과 eval_table을 빈 배열([])로 유지하세요.
-- 임의로 프로그램을 만들어내지 마세요. 파일에 근거가 있는 내용만 작성하세요.
+[파일에서 확인된 사업분류 대분류]: {present_str}
+{"[파일에 없는 대분류 - 반드시 빈 배열 유지]: " + absent_str if absent_str else ""}
 
-출력 스키마 (5개 카테고리 모두 키 포함, 미언급 카테고리는 빈 배열):
+[필수 규칙]
+1. 위 '파일에서 확인된 사업분류 대분류'에 해당하는 카테고리만 detail_table과 eval_table을 작성하세요.
+2. '파일에 없는 대분류'는 반드시 detail_table: [], eval_table: [] 로 출력하세요.
+3. 절대 임의로 프로그램을 만들지 마세요. 파일의 사업분류에 있는 프로그램명을 그대로 사용하세요.
+
+출력 스키마 (5개 카테고리 키 모두 포함):
 {schema_json}
 
-각 카테고리당 detail_table 3행, eval_table 3행 이내."""
+각 확인된 카테고리당 detail_table 최대 5행, eval_table 최대 5행."""
 
     try:
         return safe_gemini_json(prompt, system_instruction, max_retries=2)
@@ -1662,7 +1743,8 @@ def apply_guidelines_to_analysis(data: dict, guideline_rules: dict) -> tuple:
     return data, logs
 
 
-def get_partitioned_analysis(compact_text: str, progress_callback=None, month_bucket: dict = None, guideline_rules: dict = None) -> dict:
+def get_partitioned_analysis(compact_text: str, progress_callback=None, month_bucket: dict = None,
+                             guideline_rules: dict = None, file_summaries: list = None) -> dict:
     """파트별로 나눠서 참참AI 분석 수행. 부분 실패 허용. month_bucket과 guideline_rules 적용."""
     result = {
         "part1_general": {},
@@ -1673,7 +1755,13 @@ def get_partitioned_analysis(compact_text: str, progress_callback=None, month_bu
         "_failed_parts": [],
         "_guideline_logs": []
     }
-    
+
+    detected_categories = get_detected_categories_from_summaries(file_summaries or [])
+    if detected_categories:
+        print(f"[사업분류 파싱] 감지된 대분류: {detected_categories}")
+    else:
+        print("[사업분류 파싱] 사업분류 필드 미감지 → 키워드 감지로 대체")
+
     if progress_callback:
         progress_callback("Part 1 (총괄/기획) 생성 중...")
     part1 = generate_part1(compact_text)
@@ -1690,7 +1778,7 @@ def get_partitioned_analysis(compact_text: str, progress_callback=None, month_bu
     
     if progress_callback:
         progress_callback("Part 2 (세부사업) 생성 중...")
-    part2 = generate_part2(compact_text)
+    part2 = generate_part2(compact_text, detected_categories=detected_categories if detected_categories else None)
     if part2:
         result["part2_programs"] = part2
     else:
