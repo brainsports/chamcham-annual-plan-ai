@@ -696,8 +696,85 @@ def generate_part1(compact_text: str) -> dict:
         return None
 
 
+CATEGORY_KEYWORDS = {
+    "보호": [
+        "급식", "위생", "야간보호", "귀가지도", "안전교육", "가족기능강화",
+        "부모교육", "가족캠프", "돌봄서비스", "보호서비스", "생활지도",
+        "일상지도", "생존권", "보호권", "응급처치", "안전점검"
+    ],
+    "교육": [
+        "학습지도", "독서지도", "특기적성", "성장과권리", "인권교육",
+        "숙제", "학교생활", "수학", "영어", "과학", "중창", "합창",
+        "악기", "미술교육", "체육교육", "컴퓨터교육", "코딩", "학습"
+    ],
+    "문화": [
+        "문화체험", "체험활동", "소풍", "캠프", "공연관람", "박물관",
+        "미술관", "영화관람", "예술교육", "공연", "전시", "역사여행",
+        "문화행사", "나들이", "견학"
+    ],
+    "정서지원": [
+        "개별상담", "집단상담", "심리상담", "정서지원", "또래활동",
+        "사회성", "상담프로그램", "심리검사", "놀이치료", "미술치료",
+        "정서", "상담"
+    ],
+    "지역사회연계": [
+        "자원봉사", "후원", "지역사회연계", "기관연계", "네트워크",
+        "협력기관", "봉사활동", "지역연계", "후원자", "자원봉사자",
+        "연계활동", "공연 참여", "지역사회"
+    ],
+}
+
+MIN_KEYWORD_MATCHES = 1
+
+
+def detect_categories_in_text(text: str) -> list:
+    """소스 텍스트에서 언급된 대분류 카테고리 목록 반환."""
+    text_lower = text.lower()
+    found = []
+    for cat, keywords in CATEGORY_KEYWORDS.items():
+        count = sum(1 for kw in keywords if kw in text)
+        if count >= MIN_KEYWORD_MATCHES:
+            found.append(cat)
+    return found
+
+
+def ensure_feedback_table_complete(feedback_table: list) -> list:
+    """feedback_table에 5개 영역이 모두 있는지 확인하고, 누락된 영역은 빈 행으로 추가."""
+    order = ["보호", "교육", "문화", "정서지원", "지역사회연계"]
+    existing = {row.get("area", ""): row for row in feedback_table if isinstance(row, dict)}
+    complete = []
+    for area in order:
+        if area in existing:
+            complete.append(existing[area])
+        else:
+            complete.append({
+                "area": area,
+                "problem": "",
+                "improvement": ""
+            })
+    return complete
+
+
 def generate_part2(compact_text: str) -> dict:
-    """Part2 세부사업 영역만 생성."""
+    """Part2 세부사업 영역만 생성. 소스에 근거 있는 카테고리만 생성."""
+    present_cats = detect_categories_in_text(compact_text)
+
+    if not present_cats:
+        present_cats = ["교육"]
+
+    schema_lines = []
+    for cat in ["보호", "교육", "문화", "정서지원", "지역사회연계"]:
+        subs = CATEGORY_SUBCATEGORIES.get(cat, []) if cat in CATEGORY_KEYWORDS else []
+        if cat in present_cats:
+            schema_lines.append(
+                f'  "{cat}": {{"subcategories": {subs}, "detail_table": [...], "eval_table": [...]}}'
+            )
+        else:
+            schema_lines.append(f'  "{cat}": {{"subcategories": {subs}, "detail_table": [], "eval_table": []}}')
+
+    schema_json = "{\n" + ",\n".join(schema_lines) + "\n}"
+    present_str = ", ".join(present_cats)
+
     system_instruction = """당신은 지역아동센터 프로그램 기획 전문가입니다.
 한국어로 작성, 이모지 금지, ● 기호만 사용.
 출력: 오직 JSON 객체 1개만."""
@@ -706,25 +783,16 @@ def generate_part2(compact_text: str) -> dict:
 
 {compact_text}
 
-출력 스키마 (5개 카테고리):
-{{
-  "보호": {{
-    "subcategories": ["생활", "안전", "가족기능강화"],
-    "detail_table": [
-      {{"sub_area": "생활", "program_name": "프로그램명", "expected_effect": "기대효과", "target": "대상", "count": "인원", "cycle": "주기", "content": "● 내용"}}
-    ],
-    "eval_table": [
-      {{"sub_area": "생활", "program_name": "프로그램명", "expected_effect": "● 효과", "main_plan": "주요계획", "eval_method": "평가방법"}}
-    ]
-  }},
-  "교육": {{"subcategories": ["성장과권리", "학습", "특기적성"], "detail_table": [...], "eval_table": [...]}},
-  "문화": {{"subcategories": ["체험활동"], "detail_table": [...], "eval_table": [...]}},
-  "정서지원": {{"subcategories": ["상담"], "detail_table": [...], "eval_table": [...]}},
-  "지역사회연계": {{"subcategories": ["연계"], "detail_table": [...], "eval_table": [...]}}
-}}
+[중요 규칙]
+- 파일에 실제로 언급된 카테고리만 프로그램을 작성하세요: {present_str}
+- 파일에 언급되지 않은 카테고리는 반드시 detail_table과 eval_table을 빈 배열([])로 유지하세요.
+- 임의로 프로그램을 만들어내지 마세요. 파일에 근거가 있는 내용만 작성하세요.
 
-[중요] 각 카테고리당 detail_table 3행, eval_table 3행 이내."""
-    
+출력 스키마 (5개 카테고리 모두 키 포함, 미언급 카테고리는 빈 배열):
+{schema_json}
+
+각 카테고리당 detail_table 3행, eval_table 3행 이내."""
+
     try:
         return safe_gemini_json(prompt, system_instruction, max_retries=2)
     except ValueError:
@@ -1612,6 +1680,10 @@ def get_partitioned_analysis(compact_text: str, progress_callback=None, month_bu
     if part1:
         if 'satisfaction_survey' in part1:
             part1['satisfaction_survey'] = normalize_satisfaction_survey(part1.get('satisfaction_survey', {}))
+        if 'feedback_table' in part1:
+            part1['feedback_table'] = ensure_feedback_table_complete(part1['feedback_table'])
+        else:
+            part1['feedback_table'] = ensure_feedback_table_complete([])
         result["part1_general"] = part1
     else:
         result["_failed_parts"].append("part1")
