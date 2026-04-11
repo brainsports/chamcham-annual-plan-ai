@@ -125,6 +125,19 @@ def extract_program_classifications(text: str) -> list:
         if big_cat:
             _add(big_cat, m.group(2), m.group(3))
 
+    # 형식4: "사업분류 교육프로그램>한자왕" — 괄호(중분류) 없는 형식
+    # [가-힣A-Za-z0-9\s]+? 는 ( 를 포함하지 않으므로 형식1과 겹치지 않음
+    p4 = re.compile(
+        r'사업분류\s*[:\s]*([가-힣A-Za-z0-9\s]+?)\s*[>→/]\s*([^\n\r(]{1,80})',
+        re.MULTILINE
+    )
+    for m in p4.finditer(text):
+        raw_big = m.group(1).strip()
+        prog_name = m.group(2).strip()
+        big_cat = _map_big(raw_big)
+        if big_cat and prog_name:
+            _add(big_cat, "", prog_name)
+
     return results
 
 
