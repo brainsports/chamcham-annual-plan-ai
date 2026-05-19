@@ -1056,26 +1056,17 @@ else:
                     st.components.v1.html(f"""
                         <script>
                           try {{
-                            if (window.parent !== window) {{
-                              window.parent.postMessage(
-                                {{
-                                  type: "CHAMCHAM_ANNUALPLAN_DOWNLOAD",
-                                  text: "📥 PART 1 다운로드 (Word)",
-                                  part: "PART1",
-                                  fileName: "part1_{timestamp}.docx",
-                                  meta: {{
-                                    fileName: "PART1",
-                                    part: "PART1",
-                                    source: "streamlit",
-                                    file: "part1_{timestamp}.docx"
-                                  }}
-                                }},
-                                "*"
-                              );
-                              console.log("[CC] postMessage sent: PART1");
-                            }} else {{
-                              console.log("[CC] not in iframe");
-                            }}
+                            var target = (window.top !== window) ? window.top : window.parent;
+                            target.postMessage(
+                              {{
+                                type: "CHAMCHAM_ANNUALPLAN_DOWNLOAD",
+                                text: "PART 1 다운로드 (Word)",
+                                part: "PART1",
+                                fileName: "part1_{timestamp}.docx"
+                              }},
+                              "*"
+                            );
+                            console.log("[CC] postMessage sent to top: PART1");
                           }} catch (e) {{
                             console.log("[CC] postMessage error", e);
                           }}
@@ -1291,24 +1282,17 @@ else:
                     st.components.v1.html(f"""
                         <script>
                           try {{
-                            if (window.parent !== window) {{
-                              window.parent.postMessage(
-                                {{
-                                  type: "CHAMCHAM_ANNUALPLAN_DOWNLOAD",
-                                  text: "📥 PART 2 다운로드 (Word)",
-                                  part: "PART2",
-                                  fileName: "part2_{timestamp}.docx",
-                                  meta: {{
-                                    fileName: "PART2",
-                                    part: "PART2",
-                                    source: "streamlit",
-                                    file: "part2_{timestamp}.docx"
-                                  }}
-                                }},
-                                "*"
-                              );
-                              console.log("[CC] postMessage sent: PART2");
-                            }}
+                            var target = (window.top !== window) ? window.top : window.parent;
+                            target.postMessage(
+                              {{
+                                type: "CHAMCHAM_ANNUALPLAN_DOWNLOAD",
+                                text: "PART 2 다운로드 (Word)",
+                                part: "PART2",
+                                fileName: "part2_{timestamp}.docx"
+                              }},
+                              "*"
+                            );
+                            console.log("[CC] postMessage sent to top: PART2");
                           }} catch (e) {{
                             console.log("[CC] postMessage error", e);
                           }}
@@ -1414,24 +1398,17 @@ else:
                     st.components.v1.html(f"""
                         <script>
                           try {{
-                            if (window.parent !== window) {{
-                              window.parent.postMessage(
-                                {{
-                                  type: "CHAMCHAM_ANNUALPLAN_DOWNLOAD",
-                                  text: "📥 PART 3 다운로드 (Word)",
-                                  part: "PART3",
-                                  fileName: "part3_{timestamp}.docx",
-                                  meta: {{
-                                    fileName: "PART3",
-                                    part: "PART3",
-                                    source: "streamlit",
-                                    file: "part3_{timestamp}.docx"
-                                  }}
-                                }},
-                                "*"
-                              );
-                              console.log("[CC] postMessage sent: PART3");
-                            }}
+                            var target = (window.top !== window) ? window.top : window.parent;
+                            target.postMessage(
+                              {{
+                                type: "CHAMCHAM_ANNUALPLAN_DOWNLOAD",
+                                text: "PART 3 다운로드 (Word)",
+                                part: "PART3",
+                                fileName: "part3_{timestamp}.docx"
+                              }},
+                              "*"
+                            );
+                            console.log("[CC] postMessage sent to top: PART3");
                           }} catch (e) {{
                             console.log("[CC] postMessage error", e);
                           }}
@@ -1541,24 +1518,17 @@ else:
                     st.components.v1.html(f"""
                         <script>
                           try {{
-                            if (window.parent !== window) {{
-                              window.parent.postMessage(
-                                {{
-                                  type: "CHAMCHAM_ANNUALPLAN_DOWNLOAD",
-                                  text: "📥 PART 4 다운로드 (Word)",
-                                  part: "PART4",
-                                  fileName: "part4_{timestamp}.docx",
-                                  meta: {{
-                                    fileName: "PART4",
-                                    part: "PART4",
-                                    source: "streamlit",
-                                    file: "part4_{timestamp}.docx"
-                                  }}
-                                }},
-                                "*"
-                              );
-                              console.log("[CC] postMessage sent: PART4");
-                            }}
+                            var target = (window.top !== window) ? window.top : window.parent;
+                            target.postMessage(
+                              {{
+                                type: "CHAMCHAM_ANNUALPLAN_DOWNLOAD",
+                                text: "PART 4 다운로드 (Word)",
+                                part: "PART4",
+                                fileName: "part4_{timestamp}.docx"
+                              }},
+                              "*"
+                            );
+                            console.log("[CC] postMessage sent to top: PART4");
                           }} catch (e) {{
                             console.log("[CC] postMessage error", e);
                           }}

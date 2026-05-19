@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "xcD-k5nf8EdMdMXm34paZ"
+uri = "file://attached_assets/chamcham-plugin-v1.2.0.zip"
+type = "unspecified"
+title = "업데이트된 WP 플러그인 v1.2.0"

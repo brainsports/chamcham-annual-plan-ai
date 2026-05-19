@@ -1,0 +1,1183 @@
+<?php
+/*
+Plugin Name: 참참 사업계획 에이전트 Pro (iframe + 승인/다운로드제어)
+Description: Cloud Run 웹앱을 kpang.kr에 iframe으로 노출하고, 수동 승인/상품별 다운로드 제한/사용기간/DB 로그/관리자 대시보드를 제공하는 플러그인 (다운로드는 WP 프록시로 차감)
+Version: 1.1.0 (Legacy 10회/1년 + 신규 30회/6개월)
+Author: Kpang
+License: GPL v2 or later
+Text Domain: chamcham-annual-plan-agent-pro
+*/
+
+if (!defined('ABSPATH')) exit;
+
+class ChamCham_AnnualPlan_Agent_Pro {
+  const OPT_KEY = 'ccap_settings';
+
+  const META_STATUS       = 'ccap_status';           // pending|approved|blocked
+  const META_APPROVED_AT  = 'ccap_approved_at';      // unix
+  const META_EXPIRES_AT   = 'ccap_expires_at';       // unix
+  const META_USED         = 'ccap_used_downloads';   // int
+  const META_BONUS        = 'ccap_bonus_downloads';  // int
+  const META_NOTE         = 'ccap_admin_note';
+  const META_PRODUCT_CODE = 'ccap_product_code';     // 신규 상품 코드
+
+  const ACTION_DOWNLOAD   = 'download';
+
+  const PRODUCT_LEGACY_10_365 = 'plan_10_365';
+  const PRODUCT_30_180        = 'plan_30_180';
+
+  public static function init() {
+    register_activation_hook(__FILE__, [__CLASS__, 'on_activate']);
+
+    add_action('admin_menu', [__CLASS__, 'admin_menu']);
+    add_action('admin_init', [__CLASS__, 'admin_init']);
+
+    add_shortcode('chamcham_annual_plan_agent', [__CLASS__, 'shortcode']);
+
+    add_action('admin_post_ccap_proxy_download', [__CLASS__, 'handle_proxy_download']);
+    add_action('admin_post_nopriv_ccap_proxy_download', [__CLASS__, 'handle_proxy_download_nopriv']);
+
+    add_action('admin_post_ccap_user_action', [__CLASS__, 'handle_user_action']);
+  }
+
+  public static function defaults() {
+    return [
+      'app_url' => 'https://chamcham-annual-plan-ai-107014223412.asia-northeast3.run.app',
+
+      'download_url_template' => 'https://chamcham-annual-plan-ai-107014223412.asia-northeast3.run.app/download?part={PART}',
+
+      // 기존 옵션 유지 = 레거시 기본 상품(10회 / 1년)
+      'download_limit' => 10,
+      'term_days' => 365,
+
+      // 신규 상품(30회 / 6개월)
+      'plan_30_limit' => 30,
+      'plan_30_term_days' => 180,
+
+      // 추가 다운로드 최대
+      'max_bonus' => 10,
+
+      'iframe_height' => 900,
+      'show_status_box' => 1,
+      'show_download_buttons' => 1,
+    ];
+  }
+
+  public static function get_settings() {
+    $saved = get_option(self::OPT_KEY, []);
+    if (!is_array($saved)) $saved = [];
+    return array_merge(self::defaults(), $saved);
+  }
+
+  public static function on_activate() {
+    global $wpdb;
+    $table = $wpdb->prefix . 'ccap_download_logs';
+    $charset = $wpdb->get_charset_collate();
+
+    $sql = "CREATE TABLE {$table} (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+      user_id BIGINT UNSIGNED NOT NULL DEFAULT 0,
+      action VARCHAR(50) NOT NULL,
+      created_at DATETIME NOT NULL,
+      ip VARCHAR(100) NULL,
+      user_agent TEXT NULL,
+      meta LONGTEXT NULL,
+      PRIMARY KEY (id),
+      KEY user_id (user_id),
+      KEY action (action),
+      KEY created_at (created_at)
+    ) {$charset};";
+
+    require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+    dbDelta($sql);
+
+    if (!get_option(self::OPT_KEY)) {
+      add_option(self::OPT_KEY, self::defaults());
+    } else {
+      update_option(self::OPT_KEY, self::get_settings());
+    }
+  }
+
+  // ------------------------
+  // Product Helpers
+  // ------------------------
+  public static function get_products() {
+    $s = self::get_settings();
+
+    return [
+      self::PRODUCT_LEGACY_10_365 => [
+        'code' => self::PRODUCT_LEGACY_10_365,
+        'label' => '10회 / 1년',
+        'limit' => max(0, (int)$s['download_limit']),
+        'term_days' => max(1, (int)$s['term_days']),
+      ],
+      self::PRODUCT_30_180 => [
+        'code' => self::PRODUCT_30_180,
+        'label' => '30회 / 6개월',
+        'limit' => max(0, (int)$s['plan_30_limit']),
+        'term_days' => max(1, (int)$s['plan_30_term_days']),
+      ],
+    ];
+  }
+
+  public static function normalize_product_code($code) {
+    $products = self::get_products();
+    return isset($products[$code]) ? $code : self::PRODUCT_LEGACY_10_365;
+  }
+
+  public static function get_user_product_code($user_id) {
+    $code = (string)get_user_meta($user_id, self::META_PRODUCT_CODE, true);
+    if ($code === '') {
+      // 기존 사용자는 자동으로 10회 / 1년 상품으로 처리
+      return self::PRODUCT_LEGACY_10_365;
+    }
+    return self::normalize_product_code($code);
+  }
+
+  public static function get_user_product($user_id) {
+    $products = self::get_products();
+    $code = self::get_user_product_code($user_id);
+    return $products[$code];
+  }
+
+  public static function term_label_from_days($days) {
+    $days = (int)$days;
+    if ($days === 365) return '1년';
+    if ($days === 180) return '6개월';
+    return $days . '일';
+  }
+
+  // ------------------------
+  // Shortcode Front
+  // ------------------------
+  public static function shortcode($atts) {
+    $settings = self::get_settings();
+    $atts = shortcode_atts([
+      'height' => $settings['iframe_height'],
+      'show_status' => $settings['show_status_box'],
+      'show_buttons' => $settings['show_download_buttons'],
+    ], $atts, 'chamcham_annual_plan_agent');
+
+    $user_id = get_current_user_id();
+
+    if (!$user_id) {
+      $login_url = wp_login_url(self::current_url());
+      return '<div class="ccap-wrap" style="padding:16px;border:1px solid #ddd;border-radius:10px;background:#fff;">
+        <div style="font-size:16px;line-height:1.6;">
+          이 서비스를 이용하려면 로그인이 필요합니다.<br>
+          <a href="'.esc_url($login_url).'" style="display:inline-block;margin-top:8px;">로그인 하러가기</a>
+        </div>
+      </div>';
+    }
+
+    $status  = self::get_status($user_id);
+    $summary = self::get_user_summary($user_id);
+
+    $status_box = '';
+    if ((int)$atts['show_status'] === 1) {
+      $status_label = self::status_label($status);
+
+      $extra = '';
+      if ($status === 'approved') {
+        $extra = '상품: ' . $summary['product_label'] . ' · 사용기한: ' . $summary['expires_human'];
+      } elseif ($status === 'pending') {
+        $extra = '관리자 승인이 필요합니다.';
+      } elseif ($status === 'blocked') {
+        $extra = '현재 이용이 제한되어 있습니다.';
+      } elseif ($status === 'expired') {
+        $extra = '사용기한이 만료되었습니다.';
+      }
+
+      $status_box = '
+      <div data-ccap-statusbox="1" style="margin:12px 0 0 0;padding:12px 14px;border:1px solid #e5e5e5;border-radius:12px;background:#fafafa;">
+        <div style="font-size:14px;line-height:1.6;">
+          상태: <b>'.esc_html($status_label).'</b> · 상품: <b>'.esc_html($summary['product_label']).'</b> · 남은 다운로드: <b data-ccap-remaining="1">'.esc_html($summary['remaining']).'</b><br>
+          <span style="color:#555;">'.esc_html($extra).'</span>
+        </div>
+      </div>';
+    }
+
+    if ($status !== 'approved') {
+      return self::blocked_view($status) . $status_box;
+    }
+
+    $height = (int)$atts['height'];
+    if ($height < 300) $height = 300;
+
+    $buttons = '';
+    if ((int)$atts['show_buttons'] === 1) {
+      $buttons .= '<div class="ccap-dl-buttons" style="display:flex;gap:10px;flex-wrap:wrap;margin:12px 0;">';
+
+      for ($i = 1; $i <= 4; $i++) {
+        $part = 'PART' . $i;
+
+        $url = add_query_arg([
+          'action'   => 'ccap_proxy_download',
+          'part'     => $part,
+          '_wpnonce' => wp_create_nonce('ccap_proxy_download'),
+        ], admin_url('admin-post.php'));
+
+        $buttons .= '<a class="button button-primary" style="text-decoration:none;" href="' . esc_url($url) . '">' . esc_html($part) . ' 다운로드 (Word)</a>';
+      }
+
+      $buttons .= '</div>';
+
+      $buttons .= '<div style="margin:6px 0 14px 0;color:#666;font-size:12px;line-height:1.6;">
+        안내: 다운로드 버튼을 누르면 워드프레스에서 먼저 다운로드 횟수를 차감/기록한 뒤 파일 다운로드가 시작됩니다.
+      </div>';
+    }
+
+    $app_url = esc_url($settings['app_url']);
+    $iframe = '
+    <div class="ccap-iframe-wrap" style="width:100%;border:1px solid #eee;border-radius:14px;overflow:hidden;">
+      <iframe
+        src="'.$app_url.'"
+        style="width:100%;height:'.$height.'px;border:0;display:block;"
+        loading="lazy"
+        allow="clipboard-read; clipboard-write"
+        referrerpolicy="no-referrer"
+      ></iframe>
+    </div>';
+
+    return $buttons . $iframe . $status_box;
+  }
+
+  private static function blocked_view($status) {
+    if ($status === 'pending') {
+      $msg = '현재 "승인 대기" 상태입니다. 관리자 승인 후 이용할 수 있습니다.';
+    } elseif ($status === 'blocked') {
+      $msg = '현재 "이용 제한" 상태입니다. 관리자에게 문의해 주세요.';
+    } elseif ($status === 'expired') {
+      $msg = '사용기한이 만료되었습니다. 관리자에게 연장을 요청해 주세요.';
+    } else {
+      $msg = '이용할 수 없는 상태입니다.';
+    }
+
+    return '<div style="padding:16px;border:1px dashed #ccc;border-radius:12px;background:#fff;">
+      <div style="font-size:15px;line-height:1.7;">'.esc_html($msg).'</div>
+    </div>';
+  }
+
+  private static function current_url() {
+    $scheme = is_ssl() ? 'https' : 'http';
+    $host = $_SERVER['HTTP_HOST'] ?? '';
+    $uri  = $_SERVER['REQUEST_URI'] ?? '';
+    return $scheme . '://' . $host . $uri;
+  }
+
+  // ------------------------
+  // Proxy Download Handler
+  // ------------------------
+  public static function handle_proxy_download_nopriv() {
+    wp_die('로그인이 필요합니다.');
+  }
+
+  public static function handle_proxy_download() {
+    $user_id = get_current_user_id();
+    if (!$user_id) {
+      wp_die('로그인이 필요합니다.');
+    }
+
+    $nonce = $_GET['_wpnonce'] ?? '';
+    if (!wp_verify_nonce($nonce, 'ccap_proxy_download')) {
+      wp_die('보안 확인 실패');
+    }
+
+    $part = strtoupper(sanitize_text_field($_GET['part'] ?? ''));
+    if (!preg_match('/^PART[1-4]$/', $part)) {
+      wp_die('잘못된 다운로드 요청');
+    }
+
+    $status = self::get_status($user_id);
+    if ($status !== 'approved') {
+      wp_die('현재 이용할 수 없는 상태입니다.');
+    }
+
+    $summary = self::get_user_summary($user_id);
+    if ((int)$summary['remaining'] <= 0) {
+      wp_die('다운로드 가능 횟수를 모두 사용했습니다.');
+    }
+
+    $used = (int)get_user_meta($user_id, self::META_USED, true);
+    $used++;
+    update_user_meta($user_id, self::META_USED, $used);
+
+    self::insert_log($user_id, self::ACTION_DOWNLOAD, [
+      'source'       => 'wp_proxy_download',
+      'part'         => $part,
+      'fileName'     => $part . '.docx',
+      'ref'          => self::current_url(),
+      'product_code' => self::get_user_product_code($user_id),
+      'product_label'=> self::get_user_product($user_id)['label'],
+    ]);
+
+    $settings = self::get_settings();
+    $tpl = trim((string)($settings['download_url_template'] ?? ''));
+
+    if (empty($tpl) || strpos($tpl, '{PART}') === false) {
+      wp_die('다운로드 URL 템플릿이 올바르지 않습니다. 관리자 설정에서 {PART} 포함 여부를 확인하세요.');
+    }
+
+    $target = str_replace('{PART}', rawurlencode($part), $tpl);
+    $target = add_query_arg(['t' => time()], $target);
+
+    wp_safe_redirect($target);
+    exit;
+  }
+
+  // ------------------------
+  // Logs
+  // ------------------------
+  private static function insert_log($user_id, $action, $meta = null) {
+    global $wpdb;
+    $table = $wpdb->prefix . 'ccap_download_logs';
+
+    $ip = self::get_ip();
+    $ua = $_SERVER['HTTP_USER_AGENT'] ?? '';
+
+    $wpdb->insert($table, [
+      'user_id' => (int)$user_id,
+      'action' => sanitize_text_field($action),
+      'created_at' => current_time('mysql'),
+      'ip' => sanitize_text_field($ip),
+      'user_agent' => $ua ? wp_strip_all_tags($ua) : null,
+      'meta' => $meta ? wp_json_encode($meta, JSON_UNESCAPED_UNICODE) : null,
+    ]);
+  }
+
+  private static function get_ip() {
+    $keys = ['HTTP_CF_CONNECTING_IP','HTTP_X_FORWARDED_FOR','REMOTE_ADDR'];
+    foreach ($keys as $k) {
+      if (!empty($_SERVER[$k])) {
+        $val = $_SERVER[$k];
+        if ($k === 'HTTP_X_FORWARDED_FOR') {
+          $parts = explode(',', $val);
+          $val = trim($parts[0]);
+        }
+        return $val;
+      }
+    }
+    return '';
+  }
+
+  // ------------------------
+  // Status / Summary
+  // ------------------------
+  public static function get_status($user_id) {
+    $status = get_user_meta($user_id, self::META_STATUS, true);
+    if (!$status) $status = 'pending';
+
+    if ($status === 'approved') {
+      $expires = (int)get_user_meta($user_id, self::META_EXPIRES_AT, true);
+      if ($expires > 0 && time() > $expires) return 'expired';
+    }
+    return $status;
+  }
+
+  private static function status_label($status) {
+    switch ($status) {
+      case 'approved': return '승인 완료';
+      case 'pending': return '승인 대기';
+      case 'blocked': return '이용 제한';
+      case 'expired': return '기간 만료';
+      default: return (string)$status;
+    }
+  }
+
+  public static function get_user_summary($user_id) {
+    $settings = self::get_settings();
+    $product = self::get_user_product($user_id);
+
+    $used  = (int)get_user_meta($user_id, self::META_USED, true);
+    $bonus = (int)get_user_meta($user_id, self::META_BONUS, true);
+
+    if ($bonus < 0) $bonus = 0;
+    if ($bonus > (int)$settings['max_bonus']) $bonus = (int)$settings['max_bonus'];
+
+    $base_limit = (int)$product['limit'];
+    $total = $base_limit + $bonus;
+    $remaining = max(0, $total - $used);
+
+    $expires = (int)get_user_meta($user_id, self::META_EXPIRES_AT, true);
+    $expires_human = $expires ? date_i18n('Y-m-d', $expires) : '-';
+
+    return [
+      'product_code' => $product['code'],
+      'product_label' => $product['label'],
+      'product_limit' => $base_limit,
+      'product_term_days' => (int)$product['term_days'],
+      'product_term_label' => self::term_label_from_days((int)$product['term_days']),
+      'used' => $used,
+      'bonus' => $bonus,
+      'total' => $total,
+      'remaining' => $remaining,
+      'expires_at' => $expires,
+      'expires_human' => $expires_human,
+    ];
+  }
+
+  // ------------------------
+  // Admin
+  // ------------------------
+  public static function admin_menu() {
+    add_menu_page(
+      '참참 연간계획 에이전트',
+      '연간계획 에이전트',
+      'manage_options',
+      'ccap_dashboard',
+      [__CLASS__, 'admin_dashboard'],
+      'dashicons-media-spreadsheet',
+      56
+    );
+
+    add_submenu_page(
+      'ccap_dashboard',
+      '설정',
+      '설정',
+      'manage_options',
+      'ccap_settings',
+      [__CLASS__, 'admin_settings_page']
+    );
+
+    add_submenu_page(
+      'ccap_dashboard',
+      '다운로드 로그',
+      '다운로드 로그',
+      'manage_options',
+      'ccap_logs',
+      [__CLASS__, 'admin_logs_page']
+    );
+  }
+
+  public static function admin_init() {
+    register_setting('ccap_settings_group', self::OPT_KEY, [__CLASS__, 'sanitize_settings']);
+  }
+
+  public static function sanitize_settings($input) {
+    $d = self::defaults();
+    $out = [];
+
+    $out['app_url'] = isset($input['app_url']) ? esc_url_raw(trim($input['app_url'])) : $d['app_url'];
+
+    $out['download_url_template'] = isset($input['download_url_template'])
+      ? esc_url_raw(trim($input['download_url_template']))
+      : $d['download_url_template'];
+
+    // 기존 옵션 유지 = 10회 / 1년 상품
+    $out['download_limit'] = isset($input['download_limit']) ? max(0, (int)$input['download_limit']) : $d['download_limit'];
+    $out['term_days'] = isset($input['term_days']) ? max(1, (int)$input['term_days']) : $d['term_days'];
+
+    // 신규 옵션
+    $out['plan_30_limit'] = isset($input['plan_30_limit']) ? max(0, (int)$input['plan_30_limit']) : $d['plan_30_limit'];
+    $out['plan_30_term_days'] = isset($input['plan_30_term_days']) ? max(1, (int)$input['plan_30_term_days']) : $d['plan_30_term_days'];
+
+    $out['max_bonus'] = isset($input['max_bonus']) ? max(0, (int)$input['max_bonus']) : $d['max_bonus'];
+    $out['iframe_height'] = isset($input['iframe_height']) ? max(300, (int)$input['iframe_height']) : $d['iframe_height'];
+    $out['show_status_box'] = !empty($input['show_status_box']) ? 1 : 0;
+    $out['show_download_buttons'] = !empty($input['show_download_buttons']) ? 1 : 0;
+
+    return $out;
+  }
+
+  public static function admin_settings_page() {
+    if (!current_user_can('manage_options')) return;
+    $s = self::get_settings();
+    ?>
+    <div class="wrap">
+      <h1>참참 연간 사업계획 에이전트 설정</h1>
+
+      <form method="post" action="options.php">
+        <?php
+          settings_fields('ccap_settings_group');
+          do_settings_sections('ccap_settings_group');
+        ?>
+
+        <table class="form-table" role="presentation">
+          <tr>
+            <th scope="row"><label for="app_url">배포 URL (Cloud Run iframe)</label></th>
+            <td>
+              <input type="url" id="app_url" name="<?php echo esc_attr(self::OPT_KEY); ?>[app_url]" value="<?php echo esc_attr($s['app_url']); ?>" class="regular-text" />
+            </td>
+          </tr>
+
+          <tr>
+            <th scope="row"><label for="download_url_template">다운로드 URL 템플릿</label></th>
+            <td>
+              <input type="url" id="download_url_template" name="<?php echo esc_attr(self::OPT_KEY); ?>[download_url_template]" value="<?php echo esc_attr($s['download_url_template']); ?>" class="regular-text" style="width:520px;" />
+              <p class="description">
+                반드시 <code>{PART}</code> 를 포함해야 합니다. 예: <code>https://YOUR.run.app/download?part={PART}</code><br>
+                사용자가 PART 버튼을 누르면 워드프레스가 차감/기록 후 이 주소로 리다이렉트합니다.
+              </p>
+            </td>
+          </tr>
+
+          <tr>
+            <th scope="row">기본 상품 다운로드 횟수</th>
+            <td>
+              <input type="number" min="0" name="<?php echo esc_attr(self::OPT_KEY); ?>[download_limit]" value="<?php echo esc_attr($s['download_limit']); ?>" />
+              <p class="description">기존 사용자 기본값: 10회 / 1년</p>
+            </td>
+          </tr>
+
+          <tr>
+            <th scope="row">기본 상품 사용기간(일)</th>
+            <td>
+              <input type="number" min="1" name="<?php echo esc_attr(self::OPT_KEY); ?>[term_days]" value="<?php echo esc_attr($s['term_days']); ?>" />
+              <p class="description">기존 사용자 기본값: 365일</p>
+            </td>
+          </tr>
+
+          <tr>
+            <th scope="row">신규 상품 다운로드 횟수</th>
+            <td>
+              <input type="number" min="0" name="<?php echo esc_attr(self::OPT_KEY); ?>[plan_30_limit]" value="<?php echo esc_attr($s['plan_30_limit']); ?>" />
+              <p class="description">신규 상품: 30회 / 6개월</p>
+            </td>
+          </tr>
+
+          <tr>
+            <th scope="row">신규 상품 사용기간(일)</th>
+            <td>
+              <input type="number" min="1" name="<?php echo esc_attr(self::OPT_KEY); ?>[plan_30_term_days]" value="<?php echo esc_attr($s['plan_30_term_days']); ?>" />
+              <p class="description">권장값: 180일</p>
+            </td>
+          </tr>
+
+          <tr>
+            <th scope="row">추가 다운로드 최대</th>
+            <td>
+              <input type="number" min="0" name="<?php echo esc_attr(self::OPT_KEY); ?>[max_bonus]" value="<?php echo esc_attr($s['max_bonus']); ?>" />
+              <p class="description">보너스는 기존처럼 별도 합산됩니다.</p>
+            </td>
+          </tr>
+
+          <tr>
+            <th scope="row">iframe 높이(px)</th>
+            <td>
+              <input type="number" min="300" name="<?php echo esc_attr(self::OPT_KEY); ?>[iframe_height]" value="<?php echo esc_attr($s['iframe_height']); ?>" />
+            </td>
+          </tr>
+
+          <tr>
+            <th scope="row">상태 박스 표시</th>
+            <td>
+              <label>
+                <input type="checkbox" name="<?php echo esc_attr(self::OPT_KEY); ?>[show_status_box]" value="1" <?php checked((int)$s['show_status_box'], 1); ?> />
+                페이지 상단에 상태/상품/남은 다운로드를 표시합니다.
+              </label>
+            </td>
+          </tr>
+
+          <tr>
+            <th scope="row">PART 다운로드 버튼 표시</th>
+            <td>
+              <label>
+                <input type="checkbox" name="<?php echo esc_attr(self::OPT_KEY); ?>[show_download_buttons]" value="1" <?php checked((int)$s['show_download_buttons'], 1); ?> />
+                페이지에 PART1~4 다운로드(Word) 버튼을 표시합니다.
+              </label>
+            </td>
+          </tr>
+        </table>
+
+        <?php submit_button('설정 저장'); ?>
+      </form>
+
+      <hr>
+      <h2>숏코드</h2>
+      <p><code>[chamcham_annual_plan_agent]</code></p>
+      <p>높이 변경: <code>[chamcham_annual_plan_agent height="1000"]</code></p>
+      <p>상태박스 숨김: <code>[chamcham_annual_plan_agent show_status="0"]</code></p>
+      <p>PART 버튼 숨김: <code>[chamcham_annual_plan_agent show_buttons="0"]</code></p>
+    </div>
+    <?php
+  }
+
+  // ------------------------
+  // Dashboard Stats
+  // ------------------------
+  private static function ccap_get_dashboard_stats() {
+    global $wpdb;
+
+    $um = $wpdb->usermeta;
+    $users = $wpdb->users;
+    $now = time();
+
+    $total = (int) $wpdb->get_var("SELECT COUNT(ID) FROM {$users}");
+
+    $approved = (int) $wpdb->get_var($wpdb->prepare(
+      "SELECT COUNT(DISTINCT user_id) FROM {$um} WHERE meta_key=%s AND meta_value=%s",
+      self::META_STATUS, 'approved'
+    ));
+
+    $blocked = (int) $wpdb->get_var($wpdb->prepare(
+      "SELECT COUNT(DISTINCT user_id) FROM {$um} WHERE meta_key=%s AND meta_value=%s",
+      self::META_STATUS, 'blocked'
+    ));
+
+    $pending_explicit = (int) $wpdb->get_var($wpdb->prepare(
+      "SELECT COUNT(DISTINCT user_id) FROM {$um} WHERE meta_key=%s AND meta_value=%s",
+      self::META_STATUS, 'pending'
+    ));
+
+    $has_status = (int) $wpdb->get_var($wpdb->prepare(
+      "SELECT COUNT(DISTINCT user_id) FROM {$um} WHERE meta_key=%s",
+      self::META_STATUS
+    ));
+
+    $pending = max(0, $total - $has_status) + $pending_explicit;
+
+    $expired = (int) $wpdb->get_var($wpdb->prepare(
+      "SELECT COUNT(DISTINCT u1.user_id)
+       FROM {$um} u1
+       INNER JOIN {$um} u2 ON u1.user_id = u2.user_id
+       WHERE u1.meta_key=%s AND u1.meta_value=%s
+         AND u2.meta_key=%s AND CAST(u2.meta_value AS UNSIGNED) < %d",
+      self::META_STATUS, 'approved',
+      self::META_EXPIRES_AT, $now
+    ));
+
+    $used = (int) $wpdb->get_var($wpdb->prepare(
+      "SELECT COUNT(DISTINCT user_id) FROM {$um}
+       WHERE meta_key=%s AND CAST(meta_value AS UNSIGNED) > 0",
+      self::META_USED
+    ));
+
+    $unused = max(0, $total - $used);
+
+    return [
+      'total' => $total,
+      'approved' => $approved,
+      'pending' => $pending,
+      'blocked' => $blocked,
+      'expired' => $expired,
+      'used' => $used,
+      'unused' => $unused,
+    ];
+  }
+
+  public static function admin_dashboard() {
+    if (!current_user_can('manage_options')) return;
+
+    $settings = self::get_settings();
+    $products = self::get_products();
+
+    $q = trim(sanitize_text_field($_GET['q'] ?? ''));
+    $status_filter = sanitize_text_field($_GET['status'] ?? 'all');
+    $dl_filter = sanitize_text_field($_GET['dl'] ?? 'all');
+    $term_filter = sanitize_text_field($_GET['term'] ?? 'all');
+    $product_filter = sanitize_text_field($_GET['product'] ?? 'all');
+
+    $orderby = sanitize_text_field($_GET['orderby'] ?? 'ID');
+    $order = strtoupper(sanitize_text_field($_GET['order'] ?? 'DESC'));
+    if (!in_array($order, ['ASC','DESC'], true)) $order = 'DESC';
+
+    $paged = max(1, (int)($_GET['paged'] ?? 1));
+    $per_page = 20;
+    $offset = ($paged - 1) * $per_page;
+
+    $stats = ['total'=>0,'approved'=>0,'pending'=>0,'blocked'=>0,'expired'=>0,'used'=>0,'unused'=>0];
+    try {
+      $stats = self::ccap_get_dashboard_stats();
+    } catch (Throwable $e) {
+      error_log('[CCAP] dashboard stats error: ' . $e->getMessage());
+    }
+
+    $args = [
+      'number' => $per_page,
+      'offset' => $offset,
+      'orderby' => $orderby,
+      'order' => $order,
+      'fields' => ['ID', 'user_login', 'user_email', 'display_name'],
+    ];
+
+    if ($q !== '') {
+      $args['search'] = '*' . $q . '*';
+      $args['search_columns'] = ['user_login', 'user_email', 'display_name'];
+    }
+
+    $meta_query = ['relation' => 'AND'];
+
+    if ($status_filter !== 'all') {
+      if ($status_filter === 'expired') {
+        $meta_query[] = [
+          'relation' => 'OR',
+          ['key' => self::META_STATUS,'value' => 'expired','compare' => '='],
+          [
+            'relation' => 'AND',
+            ['key' => self::META_STATUS,'value' => 'approved','compare' => '='],
+            ['key' => self::META_EXPIRES_AT,'value' => time(),'compare' => '<','type' => 'NUMERIC']
+          ],
+        ];
+      } else {
+        $meta_query[] = ['key' => self::META_STATUS,'value' => $status_filter,'compare' => '='];
+      }
+    }
+
+    if ($term_filter !== 'all') {
+      if ($term_filter === 'active') {
+        $meta_query[] = [
+          'relation' => 'AND',
+          ['key' => self::META_STATUS,'value' => 'approved','compare' => '='],
+          ['key' => self::META_EXPIRES_AT,'value' => time(),'compare' => '>=','type' => 'NUMERIC'],
+        ];
+      } elseif ($term_filter === 'expired') {
+        $meta_query[] = ['key' => self::META_EXPIRES_AT,'value' => time(),'compare' => '<','type' => 'NUMERIC'];
+      } elseif ($term_filter === 'no_expiry') {
+        $meta_query[] = [
+          'relation' => 'OR',
+          ['key' => self::META_EXPIRES_AT,'compare' => 'NOT EXISTS'],
+          ['key' => self::META_EXPIRES_AT,'value' => 0,'compare' => '=','type' => 'NUMERIC'],
+        ];
+      }
+    }
+
+    if ($dl_filter !== 'all') {
+      if ($dl_filter === 'used') {
+        $meta_query[] = ['key' => self::META_USED,'value' => 0,'compare' => '>','type' => 'NUMERIC'];
+      } elseif ($dl_filter === 'unused') {
+        $meta_query[] = [
+          'relation' => 'OR',
+          ['key' => self::META_USED,'compare' => 'NOT EXISTS'],
+          ['key' => self::META_USED,'value' => 0,'compare' => '=','type' => 'NUMERIC']
+        ];
+      } elseif ($dl_filter === 'exhausted') {
+        $meta_query[] = ['key' => self::META_USED,'value' => 10,'compare' => '>=','type' => 'NUMERIC'];
+      }
+    }
+
+    if ($product_filter !== 'all') {
+      if ($product_filter === self::PRODUCT_LEGACY_10_365) {
+        $meta_query[] = [
+          'relation' => 'OR',
+          ['key' => self::META_PRODUCT_CODE, 'compare' => 'NOT EXISTS'],
+          ['key' => self::META_PRODUCT_CODE, 'value' => self::PRODUCT_LEGACY_10_365, 'compare' => '='],
+          ['key' => self::META_PRODUCT_CODE, 'value' => '', 'compare' => '='],
+        ];
+      } else {
+        $meta_query[] = ['key' => self::META_PRODUCT_CODE, 'value' => $product_filter, 'compare' => '='];
+      }
+    }
+
+    if (count($meta_query) > 1) $args['meta_query'] = $meta_query;
+
+    $query = new WP_User_Query($args);
+    $users = $query->get_results();
+    $total = (int)$query->get_total();
+    $total_pages = (int)ceil($total / $per_page);
+    ?>
+    <div class="wrap">
+      <h1>연간 사업계획 에이전트 · 사용자 관리</h1>
+
+      <div style="margin:10px 0;padding:12px;border:1px solid #e5e5e5;border-radius:10px;background:#fff;">
+        <div style="line-height:1.8;">
+          전체: <b><?php echo esc_html($stats['total']); ?>명</b> |
+          승인: <b style="color:#0a7a2f;"><?php echo esc_html($stats['approved']); ?>명</b> |
+          미승인: <b style="color:#b35c00;"><?php echo esc_html($stats['pending']); ?>명</b> |
+          차단: <b style="color:#b00020;"><?php echo esc_html($stats['blocked']); ?>명</b> |
+          기간만료: <b style="color:#7a007a;"><?php echo esc_html($stats['expired']); ?>명</b><br>
+          미사용(다운로드 0회): <b><?php echo esc_html($stats['unused']); ?>명</b> |
+          사용(다운로드 1회 이상): <b><?php echo esc_html($stats['used']); ?>명</b>
+        </div>
+        <div style="margin-top:6px;color:#555;">
+          기본상품: <?php echo esc_html($settings['download_limit']); ?>회 / <?php echo esc_html(self::term_label_from_days((int)$settings['term_days'])); ?> ·
+          신규상품: <?php echo esc_html($settings['plan_30_limit']); ?>회 / <?php echo esc_html(self::term_label_from_days((int)$settings['plan_30_term_days'])); ?> ·
+          추가 최대: <?php echo esc_html($settings['max_bonus']); ?> · 수동 승인
+        </div>
+      </div>
+
+      <form method="get" style="margin:10px 0;">
+        <input type="hidden" name="page" value="ccap_dashboard">
+        <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;">
+          <div>
+            <label style="display:block;font-size:12px;color:#555;">검색(이름/표시명/이메일)</label>
+            <input type="text" name="q" value="<?php echo esc_attr($q); ?>" style="width:320px;" placeholder="사용자명, 표시명 또는 이메일 입력">
+          </div>
+
+          <div>
+            <label style="display:block;font-size:12px;color:#555;">승인 상태</label>
+            <select name="status">
+              <option value="all" <?php selected($status_filter,'all'); ?>>전체</option>
+              <option value="approved" <?php selected($status_filter,'approved'); ?>>승인</option>
+              <option value="pending" <?php selected($status_filter,'pending'); ?>>미승인(대기)</option>
+              <option value="blocked" <?php selected($status_filter,'blocked'); ?>>차단</option>
+              <option value="expired" <?php selected($status_filter,'expired'); ?>>기간만료</option>
+            </select>
+          </div>
+
+          <div>
+            <label style="display:block;font-size:12px;color:#555;">상품</label>
+            <select name="product">
+              <option value="all" <?php selected($product_filter,'all'); ?>>전체</option>
+              <option value="<?php echo esc_attr(self::PRODUCT_LEGACY_10_365); ?>" <?php selected($product_filter,self::PRODUCT_LEGACY_10_365); ?>>10회 / 1년</option>
+              <option value="<?php echo esc_attr(self::PRODUCT_30_180); ?>" <?php selected($product_filter,self::PRODUCT_30_180); ?>>30회 / 6개월</option>
+            </select>
+          </div>
+
+          <div>
+            <label style="display:block;font-size:12px;color:#555;">다운로드 상태</label>
+            <select name="dl">
+              <option value="all" <?php selected($dl_filter,'all'); ?>>전체</option>
+              <option value="unused" <?php selected($dl_filter,'unused'); ?>>미사용(0회)</option>
+              <option value="used" <?php selected($dl_filter,'used'); ?>>사용(1회+)</option>
+              <option value="exhausted" <?php selected($dl_filter,'exhausted'); ?>>소진(참고용)</option>
+            </select>
+          </div>
+
+          <div>
+            <label style="display:block;font-size:12px;color:#555;">기간 상태</label>
+            <select name="term">
+              <option value="all" <?php selected($term_filter,'all'); ?>>전체</option>
+              <option value="active" <?php selected($term_filter,'active'); ?>>유효(승인+미만료)</option>
+              <option value="expired" <?php selected($term_filter,'expired'); ?>>만료</option>
+              <option value="no_expiry" <?php selected($term_filter,'no_expiry'); ?>>기한없음/미설정</option>
+            </select>
+          </div>
+
+          <div>
+            <label style="display:block;font-size:12px;color:#555;">정렬</label>
+            <select name="orderby">
+              <option value="ID" <?php selected($orderby,'ID'); ?>>ID</option>
+              <option value="display_name" <?php selected($orderby,'display_name'); ?>>사용자명</option>
+              <option value="user_email" <?php selected($orderby,'user_email'); ?>>이메일</option>
+            </select>
+          </div>
+
+          <div>
+            <label style="display:block;font-size:12px;color:#555;">순서</label>
+            <select name="order">
+              <option value="ASC" <?php selected($order,'ASC'); ?>>오름차순</option>
+              <option value="DESC" <?php selected($order,'DESC'); ?>>내림차순</option>
+            </select>
+          </div>
+
+          <div>
+            <button class="button button-primary">검색</button>
+            <a class="button" href="<?php echo esc_url(admin_url('admin.php?page=ccap_dashboard')); ?>">초기화</a>
+          </div>
+        </div>
+      </form>
+
+      <table class="widefat fixed striped">
+        <thead>
+          <tr>
+            <th style="width:70px;">ID</th>
+            <th>사용자</th>
+            <th style="width:110px;">상태</th>
+            <th style="width:120px;">상품</th>
+            <th style="width:120px;">사용기한</th>
+            <th style="width:160px;">다운로드(사용/전체/남음)</th>
+            <th style="width:70px;">보너스</th>
+            <th style="width:480px;">관리</th>
+          </tr>
+        </thead>
+        <tbody>
+          <?php if (empty($users)): ?>
+            <tr><td colspan="8">조건에 맞는 사용자가 없습니다.</td></tr>
+          <?php else: ?>
+            <?php foreach ($users as $u):
+              $status = self::get_status($u->ID);
+              $summary = self::get_user_summary($u->ID);
+              $label = self::status_label($status);
+              ?>
+              <tr>
+                <td><?php echo esc_html($u->ID); ?></td>
+                <td>
+                  <div><b><?php echo esc_html($u->display_name ?: $u->user_login); ?></b></div>
+                  <div style="color:#555;"><?php echo esc_html($u->user_email); ?></div>
+                </td>
+                <td><?php echo esc_html($label); ?></td>
+                <td><?php echo esc_html($summary['product_label']); ?></td>
+                <td><?php echo esc_html($summary['expires_human']); ?></td>
+                <td>
+                  <?php echo esc_html($summary['used']); ?> /
+                  <?php echo esc_html($summary['total']); ?> /
+                  <b><?php echo esc_html($summary['remaining']); ?></b>
+                </td>
+                <td><?php echo esc_html($summary['bonus']); ?></td>
+                <td><?php echo self::admin_actions_html($u->ID, $status, $summary); ?></td>
+              </tr>
+            <?php endforeach; ?>
+          <?php endif; ?>
+        </tbody>
+      </table>
+
+      <?php if ($total_pages > 1): ?>
+        <div style="margin-top:12px;">
+          <?php
+            $base_args = [
+              'page' => 'ccap_dashboard',
+              'q' => $q ?: null,
+              'status' => $status_filter !== 'all' ? $status_filter : null,
+              'product' => $product_filter !== 'all' ? $product_filter : null,
+              'dl' => $dl_filter !== 'all' ? $dl_filter : null,
+              'term' => $term_filter !== 'all' ? $term_filter : null,
+              'orderby' => $orderby !== 'ID' ? $orderby : null,
+              'order' => $order !== 'DESC' ? $order : null,
+              'paged' => '%#%',
+            ];
+            $base = add_query_arg($base_args, admin_url('admin.php'));
+            echo paginate_links([
+              'base' => $base,
+              'format' => '',
+              'current' => $paged,
+              'total' => $total_pages,
+            ]);
+          ?>
+        </div>
+      <?php endif; ?>
+    </div>
+    <?php
+  }
+
+  private static function admin_actions_html($user_id, $status, $summary) {
+    $approve_10_url = self::action_url($user_id, 'approve', ['product' => self::PRODUCT_LEGACY_10_365]);
+    $approve_30_url = self::action_url($user_id, 'approve', ['product' => self::PRODUCT_30_180]);
+    $block_url      = self::action_url($user_id, 'block');
+    $pending_url    = self::action_url($user_id, 'pending');
+    $reset_url      = self::action_url($user_id, 'reset_downloads');
+
+    $max_bonus = (int) self::get_settings()['max_bonus'];
+
+    $bonus_buttons = '';
+    foreach ([1,3,5,10] as $n) {
+      if ($n > $max_bonus) continue;
+      $bonus_buttons .= '<a class="button" href="'.esc_url(self::action_url($user_id, 'add_bonus', ['n'=>$n])).'">+'.$n.'</a> ';
+    }
+
+    $minus_buttons = '';
+    foreach ([1,3,5,10] as $n) {
+      if ($n > $max_bonus) continue;
+      $minus_buttons .= '<a class="button" href="'.esc_url(self::action_url($user_id, 'remove_bonus', ['n'=>$n])).'">-'.$n.'</a> ';
+    }
+
+    $notice = '';
+    if ($status === 'approved') {
+      $notice = '<span style="color:#666;">현재 상품: '.$summary['product_label'].'</span>';
+    }
+
+    return '<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;">
+      <a class="button button-primary" href="'.esc_url($approve_10_url).'">10회/1년 승인</a>
+      <a class="button button-primary" href="'.esc_url($approve_30_url).'">30회/6개월 승인</a>
+      <a class="button" href="'.esc_url($pending_url).'">대기</a>
+      <a class="button" href="'.esc_url($block_url).'">차단</a>
+      <a class="button" href="'.esc_url($reset_url).'" onclick="return confirm(\'다운로드 사용횟수를 0으로 초기화할까요?\')">사용횟수 초기화</a>
+      <span style="margin-left:6px;color:#666;">보너스:</span>
+      '.$bonus_buttons.'
+      '.$minus_buttons.'
+      <a class="button" href="'.esc_url(admin_url('admin.php?page=ccap_logs&user_id='.$user_id)).'">로그</a>
+      '.$notice.'
+    </div>';
+  }
+
+  private static function action_url($user_id, $action, $extra = []) {
+    $args = array_merge([
+      'action' => 'ccap_user_action',
+      'user_id' => (int)$user_id,
+      'do' => $action,
+      '_wpnonce' => wp_create_nonce('ccap_admin_action'),
+    ], $extra);
+
+    return add_query_arg($args, admin_url('admin-post.php'));
+  }
+
+  public static function handle_user_action() {
+    if (!current_user_can('manage_options')) wp_die('권한이 없습니다.');
+    if (!wp_verify_nonce($_GET['_wpnonce'] ?? '', 'ccap_admin_action')) wp_die('보안 확인 실패');
+
+    $user_id = (int)($_GET['user_id'] ?? 0);
+    $do = sanitize_text_field($_GET['do'] ?? '');
+    $settings = self::get_settings();
+
+    if ($user_id <= 0) wp_die('잘못된 사용자');
+
+    if ($do === 'approve') {
+      $product_code = self::normalize_product_code(sanitize_text_field($_GET['product'] ?? self::PRODUCT_LEGACY_10_365));
+      $products = self::get_products();
+      $product = $products[$product_code];
+
+      $prev_status = (string)get_user_meta($user_id, self::META_STATUS, true);
+      $approved_at = (int)get_user_meta($user_id, self::META_APPROVED_AT, true);
+      $expires_at  = (int)get_user_meta($user_id, self::META_EXPIRES_AT, true);
+
+      update_user_meta($user_id, self::META_STATUS, 'approved');
+      update_user_meta($user_id, self::META_PRODUCT_CODE, $product_code);
+
+      // 이미 승인된 사용자는 승인일/만료일을 덮어쓰지 않음
+      if ($prev_status !== 'approved') {
+        $now = time();
+
+        if ($approved_at <= 0) {
+          $approved_at = $now;
+          update_user_meta($user_id, self::META_APPROVED_AT, $approved_at);
+        }
+
+        if ($expires_at <= 0) {
+          $expires_at = $approved_at + ((int)$product['term_days'] * DAY_IN_SECONDS);
+          update_user_meta($user_id, self::META_EXPIRES_AT, $expires_at);
+        }
+
+        self::insert_log($user_id, 'admin_approve', [
+          'product_code'  => $product_code,
+          'product_label' => $product['label'],
+          'approved_at'   => $approved_at,
+          'expires_at'    => $expires_at,
+          'preserved_dates' => 0,
+        ]);
+      } else {
+        self::insert_log($user_id, 'admin_approve_existing', [
+          'product_code'  => $product_code,
+          'product_label' => $product['label'],
+          'approved_at'   => $approved_at,
+          'expires_at'    => $expires_at,
+          'preserved_dates' => 1,
+        ]);
+      }
+
+    } elseif ($do === 'pending') {
+      update_user_meta($user_id, self::META_STATUS, 'pending');
+      self::insert_log($user_id, 'admin_pending', null);
+
+    } elseif ($do === 'block') {
+      update_user_meta($user_id, self::META_STATUS, 'blocked');
+      self::insert_log($user_id, 'admin_block', null);
+
+    } elseif ($do === 'reset_downloads') {
+      update_user_meta($user_id, self::META_USED, 0);
+      self::insert_log($user_id, 'admin_reset_downloads', null);
+
+    } elseif ($do === 'add_bonus') {
+      $n = max(0, (int)($_GET['n'] ?? 0));
+      $max = (int)$settings['max_bonus'];
+      $cur = (int)get_user_meta($user_id, self::META_BONUS, true);
+      $cur = max(0, $cur);
+      $new = min($max, $cur + $n);
+      update_user_meta($user_id, self::META_BONUS, $new);
+      self::insert_log($user_id, 'admin_add_bonus', ['added'=>$n,'before'=>$cur,'after'=>$new]);
+
+    } elseif ($do === 'remove_bonus') {
+      $n = max(0, (int)($_GET['n'] ?? 0));
+      $cur = (int)get_user_meta($user_id, self::META_BONUS, true);
+      $cur = max(0, $cur);
+      $new = max(0, $cur - $n);
+      update_user_meta($user_id, self::META_BONUS, $new);
+      self::insert_log($user_id, 'admin_remove_bonus', ['removed'=>$n,'before'=>$cur,'after'=>$new]);
+    }
+
+    wp_safe_redirect(admin_url('admin.php?page=ccap_dashboard'));
+    exit;
+  }
+
+  // ------------------------
+  // Logs Page
+  // ------------------------
+  public static function admin_logs_page() {
+    if (!current_user_can('manage_options')) return;
+
+    global $wpdb;
+    $table = $wpdb->prefix . 'ccap_download_logs';
+
+    $user_id = (int)($_GET['user_id'] ?? 0);
+    $where = '1=1';
+    $params = [];
+
+    if ($user_id > 0) {
+      $where .= ' AND user_id = %d';
+      $params[] = $user_id;
+    }
+
+    $page = max(1, (int)($_GET['paged'] ?? 1));
+    $per_page = 30;
+    $offset = ($page - 1) * $per_page;
+
+    $count_sql = "SELECT COUNT(*) FROM {$table} WHERE {$where}";
+    $count = (int)$wpdb->get_var($params ? $wpdb->prepare($count_sql, ...$params) : $count_sql);
+
+    $sql = "SELECT * FROM {$table} WHERE {$where} ORDER BY id DESC LIMIT %d OFFSET %d";
+    $params2 = $params;
+    $params2[] = $per_page;
+    $params2[] = $offset;
+
+    $rows = $wpdb->get_results($wpdb->prepare($sql, ...$params2));
+    $total_pages = (int)ceil($count / $per_page);
+    ?>
+    <div class="wrap">
+      <h1>다운로드 로그</h1>
+
+      <form method="get" style="margin:10px 0;">
+        <input type="hidden" name="page" value="ccap_logs">
+        <label>사용자 ID로 필터: </label>
+        <input type="number" name="user_id" value="<?php echo esc_attr($user_id ?: ''); ?>" min="0" style="width:120px;">
+        <button class="button">필터</button>
+        <?php if ($user_id > 0): ?>
+          <a class="button" href="<?php echo esc_url(admin_url('admin.php?page=ccap_logs')); ?>">전체보기</a>
+        <?php endif; ?>
+      </form>
+
+      <table class="widefat fixed striped">
+        <thead>
+          <tr>
+            <th style="width:80px;">ID</th>
+            <th style="width:80px;">User</th>
+            <th style="width:120px;">파트</th>
+            <th>파일명/라벨</th>
+            <th style="width:160px;">Time</th>
+            <th style="width:140px;">IP</th>
+          </tr>
+        </thead>
+        <tbody>
+          <?php if (empty($rows)): ?>
+            <tr><td colspan="6">로그가 없습니다.</td></tr>
+          <?php else: ?>
+            <?php foreach ($rows as $r):
+              $meta = null;
+              if (!empty($r->meta)) $meta = json_decode($r->meta, true);
+
+              $part = '';
+              $display = $r->action;
+
+              if (is_array($meta)) {
+                if (!empty($meta['part'])) $part = $meta['part'];
+                if (!empty($meta['fileName'])) $display = $meta['fileName'];
+                if (!empty($meta['label'])) $display .= ' · ' . $meta['label'];
+                if (!empty($meta['product_label'])) $display .= ' · ' . $meta['product_label'];
+                if (!empty($meta['source'])) $display .= ' · ' . $meta['source'];
+              }
+            ?>
+              <tr>
+                <td><?php echo esc_html($r->id); ?></td>
+                <td><?php echo esc_html($r->user_id); ?></td>
+                <td><strong><?php echo esc_html($part ?: '-'); ?></strong></td>
+                <td><?php echo esc_html($display); ?></td>
+                <td><?php echo esc_html($r->created_at); ?></td>
+                <td><?php echo esc_html($r->ip); ?></td>
+              </tr>
+            <?php endforeach; ?>
+          <?php endif; ?>
+        </tbody>
+      </table>
+
+      <?php if ($total_pages > 1): ?>
+        <div style="margin-top:12px;">
+          <?php
+            $base = add_query_arg([
+              'page'=>'ccap_logs',
+              'user_id'=> $user_id ?: null,
+              'paged'=>'%#%'
+            ], admin_url('admin.php'));
+
+            echo paginate_links([
+              'base' => $base,
+              'format' => '',
+              'current' => $page,
+              'total' => $total_pages,
+            ]);
+          ?>
+        </div>
+      <?php endif; ?>
+    </div>
+    <?php
+  }
+}
+
+ChamCham_AnnualPlan_Agent_Pro::init();
+?>
