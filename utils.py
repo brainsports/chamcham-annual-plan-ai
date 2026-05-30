@@ -488,11 +488,22 @@ def read_pdf(file) -> str:
         import io
         file_bytes = file.read()
         text_content = []
+        total_pages = 0
         with pdfplumber.open(io.BytesIO(file_bytes)) as pdf:
+            total_pages = len(pdf.pages)
             for page in pdf.pages:
                 page_text = page.extract_text()
-                if page_text:
+                if page_text and page_text.strip():
                     text_content.append(page_text)
+        
+        if not text_content and total_pages > 0:
+            st.warning(
+                f"⚠️ PDF에서 텍스트를 추출하지 못했어요 ({total_pages}페이지). "
+                "이미지로 스캔된 PDF일 수 있습니다. "
+                "Word(.docx) 또는 텍스트가 포함된 PDF로 변환 후 다시 시도해 주세요."
+            )
+            return ""
+        
         return "\n".join(text_content)
     except Exception as e:
         st.error(f"PDF 파일 읽기 오류: {str(e)}")

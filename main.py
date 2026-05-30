@@ -320,7 +320,7 @@ if 'is_analyzing' not in st.session_state:
     st.session_state.is_analyzing = False
 
 MAX_FILES = 30
-MAX_TOTAL_SIZE_MB = 3
+MAX_TOTAL_SIZE_MB = 200
 
 # 친근한 진행 메시지
 FRIENDLY_MESSAGES = {
@@ -385,7 +385,7 @@ def render_file_upload_section():
         compact_text = summaries_to_compact_text(file_summaries)
 
         if not file_summaries:
-            st.warning("읽을 수 없는 파일이에요.")
+            st.warning("파일에서 텍스트를 읽지 못했어요. 스캔 이미지 PDF는 지원되지 않으니 Word(.docx)로 변환 후 업로드해 주세요.")
             upload_valid = False
 
         if SHOW_INTERNAL:
