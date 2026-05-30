@@ -485,8 +485,10 @@ def read_pdf(file) -> str:
     """Extract text from PDF file using pdfplumber."""
     try:
         import pdfplumber
+        import io
+        file_bytes = file.read()
         text_content = []
-        with pdfplumber.open(file) as pdf:
+        with pdfplumber.open(io.BytesIO(file_bytes)) as pdf:
             for page in pdf.pages:
                 page_text = page.extract_text()
                 if page_text:
