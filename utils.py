@@ -7,7 +7,7 @@ import streamlit as st
 import google.generativeai as genai
 
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
-GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.0-flash")
+GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.7-flash")
 
 SURVEY_QUESTION_COUNT = 10
 SURVEY_DEFAULT_QUESTIONS = [
