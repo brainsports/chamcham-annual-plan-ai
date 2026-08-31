@@ -353,19 +353,31 @@ div[data-testid="stVerticalBlockBorderWrapper"] > div {
 .abp-help-secure .abp-secure-title { font-weight: 800; margin: 0 0 2px; }
 .abp-help-secure p { margin: 0; }
 
-/* ===== 버튼 (Streamlit 버튼 오버라이드 - 연녹색 톤) ===== */
-.stButton > button {
+/* ===== 버튼 (Streamlit 버튼 오버라이드 - 연녹색 톤) =====
+   본문 주요 실행/생성 버튼: 전체폭 금지 → 텍스트 길이 + 좌우 padding(24px),
+   높이 54px 클릭 영역, 작업영역 안 가운데 정렬 */
+.stButton, .stDownloadButton {
+    display: flex !important;
+    justify-content: center !important;
+}
+.stButton > button, .stDownloadButton > button {
+    width: auto !important;
+    min-height: 54px !important;
+    padding: 0 24px !important;
+    font-size: 16px !important;
+    font-weight: 800 !important;
+    line-height: 1 !important;
+    white-space: nowrap !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
     border-radius: 10px !important;
-    font-weight: 700 !important;
     transition: all 0.2s ease !important;
-    border: 1px solid #D1D5DB;
 }
 .stButton > button[kind="primary"] {
     background: #1E6B3C !important;
     border: none !important;
     color: #FFFFFF !important;
-    font-size: 16px !important;
-    padding: 0.75rem 1.6rem !important;
     box-shadow: 0 2px 8px rgba(30, 107, 60, 0.25);
 }
 .stButton > button[kind="primary"]:hover {
@@ -518,13 +530,11 @@ h1, h2, h3, h4, h5, h6 {
     gap: 0.5rem;
 }
 
-/* 다운로드 버튼 스타일 */
+/* 다운로드 버튼: 공통 버튼 규칙 상속 + 기본 강조색만 지정 */
 .stDownloadButton > button {
     background: #1E6B3C !important;
     color: #FFFFFF !important;
-    border-radius: 10px !important;
     border: none !important;
-    font-weight: 700 !important;
 }
 
 .stDownloadButton > button:hover {
@@ -547,6 +557,12 @@ h1, h2, h3, h4, h5, h6 {
     .abp-file-grid { grid-template-columns: 1fr; }
     div[data-testid="stVerticalBlockBorderWrapper"] > div { padding: 20px 16px !important; }
     [data-testid="stFileUploaderDropzone"] { padding: 24px 16px !important; }
+    /* 모바일에서만 실행 버튼 폭 유연하게 확장 */
+    .stButton > button, .stDownloadButton > button {
+        width: 100% !important;
+        padding: 0 18px !important;
+        font-size: 15px !important;
+    }
 }
 </style>
 """
@@ -859,7 +875,7 @@ def render_analyzing_screen():
 
         # ── 반드시 버튼 클릭으로만 3단계 진입 ──
         if st.button("내용 확인 및 수정하기 →", type="primary",
-                     use_container_width=True, key="abp_goto_edit"):
+                     key="abp_goto_edit"):
             st.session_state.work_step = 'EDITING'
             st.rerun()
     else:
@@ -939,7 +955,7 @@ def render_upload_step():
 
     if uploaded_files and upload_valid:
         if st.button("✨ 분석 시작하기", type="primary",
-                     use_container_width=True, key="abp_analyze_start"):
+                     key="abp_analyze_start"):
             # 업로드 메타 저장 (분석 화면 "업로드한 자료" 카드용)
             st.session_state.uploaded_meta = [(uf.name, uf.size)
                                               for uf in uploaded_files]
@@ -1024,7 +1040,7 @@ def render_sample_button():
     """예시 데이터 버튼 렌더링 (기존 로직 유지)"""
     st.markdown("---")
     st.caption("처음이라면 예시데이터로 체험해 보세요")
-    if st.button("📋 예시 데이터로 시작하기", use_container_width=True,
+    if st.button("📋 예시 데이터로 시작하기",
                  key="abp_sample_btn"):
         raw_data = get_default_data()
         rules = load_guideline_rules()
@@ -1095,7 +1111,6 @@ def render_editing_step():
 
             if st.button("🔍 누락 영역만 보완 분석",
                          type="primary",
-                         use_container_width=True,
                          key="supplement_analyze_btn"):
                 with st.spinner("누락 영역 보완 분석 중... (Part 1~4 모두 반영)"):
                     supp_summaries = extract_file_summaries(supplement_files)
@@ -1887,11 +1902,11 @@ def render_editing_step():
     # ── 검토 완료 → 4단계 이동 버튼 ──
     st.markdown("---")
     if st.button("계획서 작성 완료하기", type="primary",
-                 use_container_width=True, key="abp_goto_complete"):
+                 key="abp_goto_complete"):
         st.session_state.work_step = 'COMPLETED'
         st.rerun()
 
-    if st.button("🔄 처음부터 다시", use_container_width=True,
+    if st.button("🔄 처음부터 다시",
                  key="abp_reset_btn"):
         st.session_state.analysis_data = None
         st.session_state.uploaded_meta = []
@@ -1984,8 +1999,7 @@ def render_completed_step():
                     file_name=f"part1_{timestamp}.docx",
                     mime="application/vnd.openxmlformats-officedocument"
                          ".wordprocessingml.document",
-                    use_container_width=True,
-                    key="abp_dl_p1"):
+                                        key="abp_dl_p1"):
                 _notify_download("PART 1", f"part1_{timestamp}.docx")
 
     with dl2:
@@ -1997,8 +2011,7 @@ def render_completed_step():
                     file_name=f"part2_{timestamp}.docx",
                     mime="application/vnd.openxmlformats-officedocument"
                          ".wordprocessingml.document",
-                    use_container_width=True,
-                    key="abp_dl_p2"):
+                                        key="abp_dl_p2"):
                 _notify_download("PART 2", f"part2_{timestamp}.docx")
 
     with dl3:
@@ -2011,8 +2024,7 @@ def render_completed_step():
                     file_name=f"part3_{timestamp}.docx",
                     mime="application/vnd.openxmlformats-officedocument"
                          ".wordprocessingml.document",
-                    use_container_width=True,
-                    key="abp_dl_p3"):
+                                        key="abp_dl_p3"):
                 _notify_download("PART 3", f"part3_{timestamp}.docx")
 
     with dl4:
@@ -2025,20 +2037,19 @@ def render_completed_step():
                     file_name=f"part4_{timestamp}.docx",
                     mime="application/vnd.openxmlformats-officedocument"
                          ".wordprocessingml.document",
-                    use_container_width=True,
-                    key="abp_dl_p4"):
+                                        key="abp_dl_p4"):
                 _notify_download("PART 4", f"part4_{timestamp}.docx")
 
     # ── 3단계 복귀 / 새로 시작 ──
     st.markdown("---")
     back_col, new_col = st.columns(2)
     with back_col:
-        if st.button("← 다시 수정하기", use_container_width=True,
+        if st.button("← 다시 수정하기",
                      key="abp_back_to_edit"):
             st.session_state.work_step = 'EDITING'
             st.rerun()
     with new_col:
-        if st.button("🔄 새로 시작하기", use_container_width=True,
+        if st.button("🔄 새로 시작하기",
                      key="abp_restart"):
             st.session_state.analysis_data = None
             st.session_state.uploaded_meta = []
