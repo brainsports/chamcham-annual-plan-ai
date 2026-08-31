@@ -1,0 +1,710 @@
+/* =========================================================
+   연간사업계획서 랜딩 페이지 (레퍼런스 픽셀 재현)
+   기준: 레퍼런스 이미지 1500 x 1100px
+========================================================= */
+
+.abp-landing {
+  position: relative;
+  min-height: 100vh;
+  background: #faf7ec;
+  overflow: hidden;
+  font-family: var(--font-sans, "Pretendard Variable", Pretendard, sans-serif);
+  padding-bottom: 64px;
+}
+
+.abp-container {
+  position: relative;
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 44px 40px 0;
+}
+
+/* ---------------- 배경 도트 ---------------- */
+.abp-dot {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border-radius: 9999px;
+  pointer-events: none;
+}
+
+/* =========================================================
+   상단 리본
+========================================================= */
+.abp-top-ribbon {
+  position: relative;
+  width: 348px;
+  height: 52px;
+  margin: 0 auto 10px;
+  background: #f6f1c4;
+  border: 2.5px solid #3a3a3a;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 3;
+}
+
+.abp-top-ribbon::before,
+.abp-top-ribbon::after {
+  content: "";
+  position: absolute;
+  top: 6px;
+  width: 46px;
+  height: 40px;
+  background: #cbc887;
+  border: 2.5px solid #3a3a3a;
+  z-index: -1;
+}
+
+.abp-top-ribbon::before {
+  left: -34px;
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%, 34% 50%);
+}
+
+.abp-top-ribbon::after {
+  right: -34px;
+  clip-path: polygon(0 0, 100% 0, 66% 50%, 100% 100%, 0 100%);
+}
+
+.abp-top-ribbon span {
+  font-size: 21px;
+  font-weight: 800;
+  color: #3a3a3a;
+  letter-spacing: -0.01em;
+}
+
+/* =========================================================
+   하늘색 메인 제목 박스
+========================================================= */
+.abp-hero-box {
+  position: relative;
+  width: 820px;
+  max-width: 100%;
+  margin: 0 auto;
+  padding: 44px 60px 54px;
+  background: #bde3f5;
+  border: 3px solid #3a3a3a;
+  border-radius: 30px;
+  box-shadow: 0 6px 0 rgba(58, 58, 58, 0.18);
+  text-align: center;
+  z-index: 2;
+}
+
+.abp-title {
+  font-size: 108px;
+  line-height: 1;
+  font-weight: 900;
+  color: #ffffff;
+  -webkit-text-stroke: 4px #3a3a3a;
+  paint-order: stroke fill;
+  text-shadow: 5px 6px 0 rgba(58, 58, 58, 0.22);
+  letter-spacing: -0.02em;
+  margin: 0;
+}
+
+.abp-subtitle {
+  margin-top: 22px;
+  font-size: 30px;
+  line-height: 1.5;
+  font-weight: 700;
+  color: #3a3a3a;
+}
+
+.abp-subtitle + .abp-subtitle {
+  margin-top: 0;
+}
+
+/* =========================================================
+   캐릭터 + 책상 씬
+========================================================= */
+.abp-scene {
+  position: relative;
+  margin-top: -34px;
+  display: flex;
+  justify-content: center;
+  z-index: 1;
+}
+
+.abp-desk-scene {
+  position: relative;
+  width: 760px;
+  max-width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.abp-characters {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 4px;
+  margin-bottom: -92px;
+  position: relative;
+  z-index: 2;
+}
+
+.abp-character {
+  width: 220px;
+  height: auto;
+}
+
+/* 책상 */
+.abp-desk {
+  position: relative;
+  width: 100%;
+  z-index: 1;
+}
+
+.abp-desk-top {
+  width: 100%;
+  height: 26px;
+  background: #f5ead4;
+  border: 3px solid #3a3a3a;
+  border-radius: 8px;
+}
+
+.abp-desk-front {
+  width: 92%;
+  height: 78px;
+  margin: -3px auto 0;
+  background: #efe0c2;
+  border: 3px solid #3a3a3a;
+  border-top: none;
+  border-radius: 0 0 14px 14px;
+  clip-path: polygon(2% 0, 98% 0, 100% 100%, 0 100%);
+}
+
+/* 책상 위 책 */
+.abp-desk-books {
+  position: absolute;
+  top: -50px;
+  right: 34px;
+}
+
+.abp-desk-books-svg {
+  width: 96px;
+  height: auto;
+  display: block;
+}
+
+/* =========================================================
+   좌우 장식
+========================================================= */
+.abp-scene .abp-side {
+  position: absolute;
+  top: 0;
+  width: 180px;
+  height: 100%;
+  pointer-events: none;
+}
+
+.abp-side-left {
+  left: 0;
+}
+
+.abp-side-right {
+  right: 0;
+}
+
+.abp-deco {
+  position: absolute;
+}
+
+.abp-deco-clover-excl {
+  width: 84px;
+  top: -28px;
+  left: 12px;
+}
+
+.abp-deco-laptop {
+  width: 128px;
+  top: 130px;
+  left: -8px;
+  transform: rotate(-8deg);
+}
+
+.abp-side-left .abp-deco-pencil {
+  width: 34px;
+  top: 300px;
+  left: 24px;
+}
+
+.abp-side-right .abp-deco-pencil {
+  width: 34px;
+  top: -34px;
+  right: 30px;
+}
+
+.abp-deco-book {
+  width: 104px;
+  top: 100px;
+  right: -6px;
+  transform: rotate(8deg);
+}
+
+.abp-deco-clover-sparkle {
+  width: 92px;
+  top: 260px;
+  right: 6px;
+}
+
+/* =========================================================
+   이렇게 진행돼요! + 단계 패널
+========================================================= */
+.abp-process-row {
+  display: flex;
+  justify-content: center;
+  align-items: stretch;
+  gap: 28px;
+  margin-top: 44px;
+}
+
+.abp-process-panel {
+  position: relative;
+  width: 1020px;
+  max-width: 100%;
+  background: #fdfbf3;
+  border: 2.5px dashed #3a3a3a;
+  border-radius: 20px;
+  padding: 52px 44px 40px;
+}
+
+.abp-process-ribbon {
+  position: absolute;
+  top: -22px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #fbe88a;
+  border: 2.5px solid #3a3a3a;
+  border-radius: 8px;
+  padding: 9px 34px;
+  font-size: 20px;
+  font-weight: 800;
+  color: #3a3a3a;
+  white-space: nowrap;
+}
+
+.abp-process-ribbon::before,
+.abp-process-ribbon::after {
+  content: "";
+  position: absolute;
+  top: 5px;
+  width: 22px;
+  height: 30px;
+  background: #d9c25e;
+  border: 2.5px solid #3a3a3a;
+  z-index: -1;
+}
+
+.abp-process-ribbon::before {
+  left: -18px;
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%, 40% 50%);
+}
+
+.abp-process-ribbon::after {
+  right: -18px;
+  clip-path: polygon(0 0, 100% 0, 60% 50%, 100% 100%, 0 100%);
+}
+
+.abp-steps {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.abp-step {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.abp-step-icon {
+  position: relative;
+  width: 86px;
+  height: 86px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.abp-icon {
+  width: 86px;
+  height: 86px;
+}
+
+.abp-step-badge {
+  position: absolute;
+  top: -8px;
+  left: -10px;
+  width: 34px;
+  height: 34px;
+  border-radius: 9999px;
+  border: 2.5px solid #3a3a3a;
+  color: #ffffff;
+  font-size: 15px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1;
+}
+
+.abp-step-title {
+  margin-top: 14px;
+  font-size: 22px;
+  font-weight: 800;
+  color: #3a3a3a;
+}
+
+.abp-step-desc {
+  margin-top: 6px;
+  font-size: 15px;
+  line-height: 1.45;
+  color: #6b6b6b;
+  word-break: keep-all;
+}
+
+.abp-arrow {
+  flex-shrink: 0;
+  align-self: center;
+  margin-top: 30px;
+  font-size: 30px;
+  color: #9a9a9a;
+  line-height: 1;
+}
+
+/* =========================================================
+   준비 자료 박스
+========================================================= */
+.abp-materials {
+  position: relative;
+  width: 250px;
+  flex-shrink: 0;
+  background: #eaf4e2;
+  border: 2.5px solid #3a3a3a;
+  border-radius: 16px;
+  padding: 40px 22px 26px;
+  text-align: center;
+}
+
+.abp-materials-tab {
+  position: absolute;
+  top: -18px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #a5cf8d;
+  border: 2.5px solid #3a3a3a;
+  border-radius: 9999px;
+  padding: 7px 26px;
+  font-size: 18px;
+  font-weight: 800;
+  color: #ffffff;
+  white-space: nowrap;
+}
+
+.abp-materials-icon {
+  width: 88px;
+  margin: 4px auto 0;
+  display: block;
+}
+
+.abp-materials-title {
+  margin-top: 10px;
+  font-size: 21px;
+  font-weight: 800;
+  color: #3a3a3a;
+}
+
+.abp-materials-desc {
+  margin-top: 8px;
+  font-size: 14px;
+  line-height: 1.5;
+  font-weight: 600;
+  color: #4f6b41;
+  word-break: keep-all;
+}
+
+/* =========================================================
+   하단 버튼
+========================================================= */
+.abp-buttons {
+  display: flex;
+  justify-content: center;
+  align-items: stretch;
+  gap: 56px;
+  margin-top: 48px;
+}
+
+.abp-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  border-radius: 16px;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.abp-btn:hover {
+  transform: translateY(-2px);
+}
+
+.abp-btn:active {
+  transform: translateY(0);
+}
+
+.abp-btn-primary {
+  width: 430px;
+  max-width: 100%;
+  padding: 16px 24px;
+  background: #2bb8b8;
+  border: 3px solid #3a3a3a;
+  box-shadow: 0 6px 0 rgba(58, 58, 58, 0.25);
+}
+
+.abp-btn-primary:hover {
+  background: #2cc4c4;
+}
+
+.abp-btn-secondary {
+  width: 360px;
+  max-width: 100%;
+  padding: 13px 24px;
+  background: #ffffff;
+  border: 3px solid #3a3a3a;
+  box-shadow: 0 6px 0 rgba(58, 58, 58, 0.15);
+}
+
+.abp-btn-primary .abp-btn-line {
+  font-size: 27px;
+  font-weight: 800;
+  color: #ffffff;
+}
+
+.abp-btn-primary .abp-btn-sub {
+  font-size: 16px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.abp-btn-secondary .abp-btn-line {
+  font-size: 24px;
+  font-weight: 800;
+  color: #3a3a3a;
+}
+
+.abp-btn-secondary .abp-btn-sub {
+  font-size: 14px;
+  font-weight: 600;
+  color: #6b6b6b;
+}
+
+/* =========================================================
+   하단 안내 문구
+========================================================= */
+.abp-notice {
+  margin-top: 34px;
+  text-align: center;
+  font-size: 17px;
+  font-weight: 700;
+  color: #4a4a4a;
+  word-break: keep-all;
+}
+
+/* =========================================================
+   반응형 (태블릿/모바일 - 깨짐 방지 최소한만)
+========================================================= */
+@media (max-width: 1280px) {
+  .abp-container {
+    max-width: 1080px;
+    padding: 36px 28px 0;
+  }
+
+  .abp-hero-box {
+    width: 100%;
+    padding: 38px 40px 46px;
+  }
+
+  .abp-title {
+    font-size: 84px;
+  }
+
+  .abp-subtitle {
+    font-size: 25px;
+  }
+
+  .abp-desk-scene {
+    width: 640px;
+  }
+
+  .abp-character {
+    width: 190px;
+  }
+
+  .abp-scene .abp-side {
+    width: 150px;
+  }
+
+  .abp-process-panel {
+    padding: 48px 28px 34px;
+  }
+}
+
+@media (max-width: 1024px) {
+  .abp-container {
+    max-width: 100%;
+    padding: 28px 20px 0;
+  }
+
+  .abp-title {
+    font-size: 66px;
+    -webkit-text-stroke: 3px #3a3a3a;
+  }
+
+  .abp-subtitle {
+    font-size: 21px;
+  }
+
+  .abp-scene .abp-side {
+    display: none;
+  }
+
+  .abp-desk-scene {
+    width: 560px;
+  }
+
+  .abp-character {
+    width: 170px;
+  }
+
+  .abp-process-row {
+    flex-direction: column;
+    align-items: center;
+    gap: 40px;
+  }
+
+  .abp-process-panel {
+    width: 100%;
+  }
+
+  .abp-steps {
+    flex-wrap: wrap;
+    gap: 20px 12px;
+  }
+
+  .abp-step {
+    flex: 1 1 40%;
+  }
+
+  .abp-arrow {
+    display: none;
+  }
+
+  .abp-materials {
+    width: 100%;
+    max-width: 430px;
+  }
+
+  .abp-buttons {
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+  }
+
+  .abp-btn-primary,
+  .abp-btn-secondary {
+    width: 100%;
+    max-width: 430px;
+  }
+}
+
+@media (max-width: 640px) {
+  .abp-container {
+    padding: 20px 14px 0;
+  }
+
+  .abp-top-ribbon {
+    width: auto;
+    min-width: 0;
+    max-width: calc(100% - 68px);
+    padding: 0 10px;
+  }
+
+  .abp-top-ribbon span {
+    font-size: 17px;
+  }
+
+  .abp-hero-box {
+    padding: 26px 18px 34px;
+    border-radius: 22px;
+  }
+
+  .abp-title {
+    font-size: 44px;
+    -webkit-text-stroke: 2.5px #3a3a3a;
+    text-shadow: 3px 4px 0 rgba(58, 58, 58, 0.22);
+  }
+
+  .abp-subtitle {
+    margin-top: 14px;
+    font-size: 16px;
+  }
+
+  .abp-desk-scene {
+    width: 100%;
+  }
+
+  .abp-character {
+    width: 42vw;
+    max-width: 150px;
+  }
+
+  .abp-characters {
+    margin-bottom: -64px;
+  }
+
+  .abp-desk-front {
+    height: 54px;
+  }
+
+  .abp-desk-books {
+    top: -38px;
+    right: 10px;
+  }
+
+  .abp-desk-books-svg {
+    width: 68px;
+  }
+
+  .abp-process-ribbon {
+    padding: 8px 20px;
+    font-size: 17px;
+  }
+
+  .abp-process-panel {
+    padding: 42px 16px 28px;
+  }
+
+  .abp-step {
+    flex: 1 1 100%;
+  }
+
+  .abp-step-title {
+    font-size: 19px;
+  }
+
+  .abp-step-desc {
+    font-size: 14px;
+  }
+
+  .abp-notice {
+    font-size: 15px;
+  }
+}

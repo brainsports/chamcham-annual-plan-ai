@@ -11,6 +11,7 @@ import { RightPanel, shouldShowRightPanel } from "@/components/RightPanel";
 import { MobileStepDrawer } from "@/components/MobileStepDrawer";
 import { MobileRightPanelSheet } from "@/components/MobileRightPanelSheet";
 
+import { LandingPage } from "@/pages/LandingPage";
 import { UploadPage } from "@/pages/UploadPage";
 import { ClassifyPage } from "@/pages/ClassifyPage";
 import AnnualPlanPart1Page from "@/pages/AnnualPlanPart1Page";
@@ -52,6 +53,7 @@ function getStepFromPath(pathname: string): number {
 function Router() {
   return (
     <Switch>
+      <Route path="/annual-business-plan" component={LandingPage} />
       <Route path="/" component={UploadPage} />
       <Route path="/classify" component={ClassifyPage} />
       <Route path="/annual/part1" component={AnnualPlanPart1Page} />
@@ -164,15 +166,22 @@ function App() {
     navigate(stepRoutes[step] || "/");
   };
 
+  // 랜딩 페이지는 앱 셸(사이드바/헤더) 없이 풀스크린으로 표시
+  const isLanding = location.startsWith("/annual-business-plan");
+
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
         <TooltipProvider>
-          <div className="flex min-h-screen w-full bg-background">
-            <LeftSidebar location={location} onStepClick={handleStepClick} />
-            <MainContent location={location} onStepClick={handleStepClick} />
-            <RightSidebar location={location} />
-          </div>
+          {isLanding ? (
+            <LandingPage />
+          ) : (
+            <div className="flex min-h-screen w-full bg-background">
+              <LeftSidebar location={location} onStepClick={handleStepClick} />
+              <MainContent location={location} onStepClick={handleStepClick} />
+              <RightSidebar location={location} />
+            </div>
+          )}
           <Toaster />
         </TooltipProvider>
       </ThemeProvider>
