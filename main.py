@@ -74,7 +74,7 @@ APP_STYLE = """
 
 /* 전체 앱 배경 */
 .stApp, [data-testid="stAppViewContainer"] {
-    background-color: #F5F7F5 !important;
+    background-color: #FBFCFB !important;
 }
 
 /* Streamlit 기본 UI 숨김 */
@@ -91,9 +91,9 @@ footer {visibility: hidden;}
 
 /* 레이아웃 컨테이너: 카드 없는 넓은 캔버스 (카드는 본문에서 개별 렌더) */
 .main .block-container {
-    max-width: 1200px !important;
+    max-width: 1450px !important;
     margin: 0 auto !important;
-    padding: 1.5rem 1.5rem 2rem !important;
+    padding: 20px 20px 28px !important;
     background: transparent;
     border: none;
     box-shadow: none;
@@ -103,73 +103,92 @@ footer {visibility: hidden;}
 .abp-card {
     background: #FFFFFF;
     border: 1px solid #E5E7EB;
-    border-radius: 16px;
-    padding: 24px;
-    margin-bottom: 24px;
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 16px;
 }
 .abp-card h3, .abp-card h4 { margin: 0; }
+
+/* 작업 단계의 큰 왼쪽 카드 */
+div[data-testid="stVerticalBlockBorderWrapper"] {
+    background: #FFFFFF !important;
+    border: 1px solid #E2E7E3 !important;
+    border-radius: 12px !important;
+    box-shadow: 0 2px 8px rgba(31, 41, 55, .035);
+}
+div[data-testid="stVerticalBlockBorderWrapper"] > div {
+    padding: 24px 28px !important;
+}
+.abp-analysis-section { padding: 2px 0 0; margin-bottom: 18px; }
 
 /* ===== 4단계 진행표시 (스텝 인디케이터) ===== */
 .abp-steps {
     display: flex; align-items: flex-start; justify-content: space-between;
-    background: #FFFFFF; border: 1px solid #E5E7EB; border-radius: 16px;
-    padding: 20px 28px 16px; margin-bottom: 24px;
+    background: #FFFFFF; border: 1px solid #DDE3DF; border-radius: 10px;
+    padding: 24px 74px 18px; margin-bottom: 24px;
+    box-shadow: 0 2px 7px rgba(31, 41, 55, .035);
 }
 .abp-step {
     flex: 1 1 0; min-width: 0; display: flex; align-items: flex-start;
-    gap: 10px; position: relative; padding-bottom: 12px;
+    gap: 14px; position: relative; padding-bottom: 14px;
 }
 .abp-step-num {
-    width: 32px; height: 32px; border-radius: 50%; flex-shrink: 0;
+    width: 36px; height: 36px; border-radius: 50%; flex-shrink: 0;
     display: flex; align-items: center; justify-content: center;
-    font-size: 14px; font-weight: 700; color: #FFFFFF;
-    background: #CBD5D1; border: none;
+    font-size: 16px; font-weight: 800; color: #334155;
+    background: #EEF1F0; border: none;
 }
-.abp-step.done .abp-step-num { background: #2E7D4F; }
-.abp-step.active .abp-step-num { background: #2E7D4F; }
+.abp-step.done .abp-step-num,
+.abp-step.active .abp-step-num { background: #3E9653; color: #FFFFFF; }
 .abp-step-txt { min-width: 0; }
 .abp-step-title {
-    font-size: 15px; font-weight: 700; color: #9CA3AF; line-height: 1.3;
+    font-size: 17px; font-weight: 800; color: #263244; line-height: 1.3;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.abp-step.done .abp-step-title { color: #374151; }
-.abp-step.active .abp-step-title { color: #2E7D4F; }
+.abp-step.done .abp-step-title { color: #263244; }
+.abp-step.active .abp-step-title { color: #26783A; }
 .abp-step-desc {
-    font-size: 12px; color: #9CA3AF; margin-top: 3px; line-height: 1.4;
+    font-size: 13px; color: #536071; margin-top: 4px; line-height: 1.4;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.abp-step.active .abp-step-desc { color: #6B7280; }
+.abp-step.active .abp-step-desc { color: #455264; }
 .abp-step.active::after {
     content: ""; position: absolute; left: 0; right: 0; bottom: 0;
-    height: 3px; border-radius: 2px; background: #2E7D4F;
+    height: 3px; border-radius: 2px; background: #2F8B45;
 }
 .abp-step-link {
-    flex: 0 0 auto; align-self: center; margin: 6px 10px 14px;
-    color: #2E7D4F; font-size: 16px; font-weight: 700; line-height: 1;
+    flex: 0 0 84px; align-self: center; margin: 5px 14px 15px;
+    color: #59A568; font-size: 24px; font-weight: 500; line-height: 1;
+    text-align: center;
 }
 .abp-step-link.pending { color: #C7CFCB; }
-.abp-step-link.pending::before { content: "· · ·"; letter-spacing: -1px; }
+.abp-step-link.pending::before { content: "┈┈┈"; letter-spacing: 1px; }
 .abp-step-link.done-link::before { content: "→"; }
 
 /* ===== 헤더 (제목 + 우측 버튼) ===== */
 .abp-header {
     display: flex; align-items: center; justify-content: space-between;
-    gap: 16px; margin-bottom: 24px; flex-wrap: wrap;
+    gap: 16px; margin-bottom: 22px; flex-wrap: wrap;
 }
-.abp-header h1 { font-size: 26px; font-weight: 800; color: #1F2937; margin: 0; }
-.abp-header p { font-size: 14px; color: #6B7280; margin: 6px 0 0; }
+.abp-header h1 {
+    font-size: 38px; line-height: 1.2; font-weight: 900;
+    color: #17202D; margin: 0; letter-spacing: -.8px;
+}
+.abp-header h1 .abp-ai { color: #2F8B45; }
+.abp-header h1 .abp-sparkle { color: #F3B93F; font-size: 32px; }
+.abp-header p { font-size: 16px; color: #526070; margin: 12px 0 0; }
 .abp-header-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .abp-header-btn {
     display: inline-flex; align-items: center; gap: 6px;
-    background: #FFFFFF; border: 1px solid #D1D5DB; border-radius: 10px;
-    padding: 9px 16px; font-size: 14px; font-weight: 600; color: #374151;
+    background: #FFFFFF; border: 1px solid #D6DDE2; border-radius: 8px;
+    padding: 13px 20px; font-size: 15px; font-weight: 700; color: #344054;
     cursor: pointer; transition: background .15s ease;
 }
 .abp-header-btn:hover { background: #F3F6F4; }
 
 /* ===== 왼쪽 메인 영역 공통 ===== */
-.abp-main-title { font-size: 19px; font-weight: 800; color: #1F2937; margin: 0 0 4px; }
-.abp-main-desc { font-size: 14px; color: #6B7280; margin: 0 0 20px; }
+.abp-main-title { font-size: 24px; font-weight: 850; color: #1B2430; margin: 0 0 8px; }
+.abp-main-desc { font-size: 15px; color: #596574; margin: 0 0 22px; line-height: 1.55; }
 
 /* ===== 업로드 드롭존 안내 ===== */
 .abp-upload-guide {
@@ -303,27 +322,31 @@ footer {visibility: hidden;}
 
 /* ===== 오른쪽 도움말 영역 ===== */
 .abp-help-card {
-    background: #FFFFFF; border: 1px solid #E5E7EB; border-radius: 16px;
-    padding: 22px;
+    background: #FCFEFB; border: 1px solid #D5E5D7; border-radius: 12px;
+    padding: 24px 22px 20px; min-height: 100%;
+    box-shadow: 0 2px 8px rgba(31, 41, 55, .025);
 }
 .abp-help-title {
-    font-size: 17px; font-weight: 800; color: #1F2937; margin: 0 0 6px;
+    font-size: 18px; font-weight: 850; color: #26783A; margin: 0 0 8px;
     display: flex; align-items: center; gap: 8px;
 }
-.abp-help-sub { font-size: 13px; color: #6B7280; margin: 0 0 14px; }
-.abp-help-sep { border: none; border-top: 1px solid #EEF1EF; margin: 0 0 16px; }
-.abp-qa { display: flex; gap: 12px; margin-bottom: 18px; }
+.abp-help-sub { font-size: 13px; color: #647080; margin: 0 0 16px; }
+.abp-help-sep { border: none; border-top: 1px solid #E1EAE2; margin: 0 0 18px; }
+.abp-qa {
+    display: flex; gap: 12px; margin-bottom: 18px; padding-bottom: 18px;
+    border-bottom: 1px solid #E1EAE2;
+}
 .abp-qa-icon {
-    width: 38px; height: 38px; border-radius: 50%; flex-shrink: 0;
-    background: #F3F6F4; font-size: 17px;
+    width: 40px; height: 40px; border-radius: 50%; flex-shrink: 0;
+    background: #FFFFFF; border: 1px solid #DDE5E0; font-size: 18px;
     display: flex; align-items: center; justify-content: center;
 }
-.abp-qa-q { font-size: 15px; font-weight: 700; color: #1F2937; margin: 0 0 6px; }
-.abp-qa-a { font-size: 13px; color: #4B5563; line-height: 1.55; margin: 0 0 4px;
+.abp-qa-q { font-size: 16px; font-weight: 800; color: #26783A; margin: 0 0 7px; }
+.abp-qa-a { font-size: 13px; color: #485566; line-height: 1.6; margin: 0 0 5px;
             display: flex; gap: 6px; }
 .abp-qa-a::before { content: "✓"; color: #2E7D4F; font-weight: 800; flex-shrink: 0; }
 .abp-help-secure {
-    background: #EAF4EC; border-radius: 10px; padding: 14px 16px;
+    background: #F0F7EF; border: 1px solid #D5E5D4; border-radius: 10px; padding: 14px 16px;
     display: flex; align-items: flex-start; gap: 10px;
     font-size: 13px; color: #2E7D4F; font-weight: 600; line-height: 1.5;
 }
@@ -361,12 +384,41 @@ footer {visibility: hidden;}
     color: #2E7D4F !important;
 }
 
-/* 파일 업로더 스타일 */
+/* 파일 업로더: 단일 대형 카드 + 한글 선택 버튼 */
 [data-testid="stFileUploader"] {
-    background: #FAFBFA;
-    border-radius: 12px;
-    border: 2px dashed #A7C9B4;
-    padding: 0.8rem;
+    background: transparent;
+    border: none;
+    border-radius: 0;
+    padding: 0;
+}
+[data-testid="stFileUploaderDropzone"] {
+    min-height: 205px;
+    background: #FBFDFB !important;
+    border: 2px dashed #8DBA98 !important;
+    border-radius: 12px !important;
+    padding: 34px 32px !important;
+}
+[data-testid="stFileUploaderDropzoneInstructions"] {
+    font-size: 0 !important;
+}
+[data-testid="stFileUploaderDropzoneInstructions"]::before {
+    content: "참고자료를 끌어다 놓거나 선택하세요";
+    display: block; font-size: 17px; font-weight: 800; color: #273342;
+    margin-bottom: 8px;
+}
+[data-testid="stFileUploaderDropzoneInstructions"]::after {
+    content: "여러 파일을 한 번에 업로드할 수 있어요  ·  PDF, DOCX, TXT, CSV";
+    display: block; font-size: 13px; color: #687585;
+}
+[data-testid="stFileUploaderDropzoneInstructions"] small { display: none !important; }
+[data-testid="stFileUploader"] button {
+    min-width: 132px; min-height: 44px; font-size: 0 !important;
+    color: #FFFFFF !important; background: #2F8B45 !important;
+    border: 1px solid #26783A !important; border-radius: 8px !important;
+}
+[data-testid="stFileUploader"] button * { font-size: 0 !important; }
+[data-testid="stFileUploader"] button::after {
+    content: "파일 선택하기"; font-size: 15px; font-weight: 800; color: #FFFFFF;
 }
 
 /* 성공/정보 메시지 스타일 */
@@ -481,16 +533,20 @@ h1, h2, h3, h4, h5, h6 {
 
 /* ===== 반응형 ===== */
 @media (max-width: 1024px) {
-    .abp-steps { flex-wrap: wrap; padding: 16px 18px 12px; }
+    .main .block-container { padding-left: 16px !important; padding-right: 16px !important; }
+    .abp-steps { flex-wrap: wrap; padding: 18px 22px 12px; }
     .abp-step { flex: 1 1 42%; padding-bottom: 10px; }
     .abp-step-link { display: none; }
     .abp-step.active::after { left: 0; right: 0; }
-    .abp-header h1 { font-size: 22px; }
+    .abp-header h1 { font-size: 30px; }
 }
 @media (max-width: 640px) {
+    .main .block-container { padding: 12px 12px 22px !important; }
     .abp-step { flex: 1 1 100%; }
     .abp-step-title, .abp-step-desc { white-space: normal; }
     .abp-file-grid { grid-template-columns: 1fr; }
+    div[data-testid="stVerticalBlockBorderWrapper"] > div { padding: 20px 16px !important; }
+    [data-testid="stFileUploaderDropzone"] { padding: 24px 16px !important; }
 }
 </style>
 """
@@ -540,10 +596,10 @@ if 'guideline_logs' not in st.session_state:
 # 4단계 진행표시 컴포넌트 (레퍼런스: annual-plan-step-ui-reference.png)
 # ============================================================
 STEPS_DEF = [
-    ("1", "자료 업로드", "참고자료 파일 선택"),
-    ("2", "분석하기", "AI가 자료를 분석해요"),
-    ("3", "수정하기", "내용 확인 및 직접 수정"),
-    ("4", "완성 / 다운로드", "Word 파일로 저장"),
+    ("1", "자료 업로드", "참고자료 업로드"),
+    ("2", "분석하기", "AI가 자료를 분석합니다"),
+    ("3", "수정하기", "내용을 확인하고 수정합니다"),
+    ("4", "완성 / 다운로드", "계획서를 저장하고 다운로드"),
 ]
 
 
@@ -586,8 +642,9 @@ def render_header():
         """
         <div class="abp-header">
             <div>
-                <h1>AI 연간사업계획서 만들기 ✨</h1>
-                <p>참고자료만 올리면 AI가 연간사업계획서 초안을 만들어드려요</p>
+                <h1><span class="abp-ai">AI</span> 연간사업계획서 만들기
+                    <span class="abp-sparkle">✦</span></h1>
+                <p>참고자료를 업로드하고 AI가 분석하여 연간사업계획서 작성을 도와드립니다.</p>
             </div>
             <div class="abp-header-actions">
                 <button class="abp-header-btn" onclick="null">📖 사용 가이드</button>
@@ -797,7 +854,7 @@ def render_analyzing_screen():
             '<div class="abp-progress-bar" style="width:100%"></div></div>'
             '<span class="abp-progress-label">분석 진행률 100%</span></div>')
         st.markdown(
-            " ".join(('<div class="abp-card">' + body + '</div>').split()),
+            " ".join(('<div class="abp-analysis-section">' + body + '</div>').split()),
             unsafe_allow_html=True)
 
         # ── 반드시 버튼 클릭으로만 3단계 진입 ──
@@ -822,7 +879,7 @@ def render_analyzing_screen():
             f'<span class="abp-progress-label">분석 진행률 {progress}%</span></div>'
             + note)
         st.markdown(
-            " ".join(('<div class="abp-card">' + body + '</div>').split()),
+            " ".join(('<div class="abp-analysis-section">' + body + '</div>').split()),
             unsafe_allow_html=True)
 
 
@@ -831,18 +888,7 @@ def render_analyzing_screen():
 # ============================================================
 def render_file_upload_section():
     """1단계: 파일 업로드 UI 렌더링 (드래그앤드롭/다중 업로드)"""
-    st.markdown(
-        """
-        <div class="abp-upload-guide">
-            <div class="abp-ug-icon">📎</div>
-            <p class="abp-ug-title">참고자료를 끌어다 놓거나 선택하세요</p>
-            <p class="abp-ug-desc">여러 개의 파일을 한 번에 업로드할 수 있어요</p>
-            <p class="abp-ug-formats">PDF · DOCX · TXT · CSV (최대 30개, 200MB)</p>
-        </div>
-        """,
-        unsafe_allow_html=True)
-
-    uploaded_files = st.file_uploader("PDF, DOCX 파일 지원",
+    uploaded_files = st.file_uploader("파일 선택하기",
                                       type=['pdf', 'docx', 'txt', 'csv'],
                                       accept_multiple_files=True,
                                       label_visibility="collapsed",
@@ -2030,35 +2076,37 @@ if st.session_state.get('show_landing', True):
         st.rerun()
     st.stop()
 
-# ── 상단: 진행표시 + 헤더 (모든 단계에서 항상 표시) ──
-render_step_indicator(st.session_state.work_step)
+# ── 상단: 제목/설명 → 4단계 진행표시 (모든 단계에서 항상 표시) ──
 render_header()
+render_step_indicator(st.session_state.work_step)
 
 if st.session_state.get('_partial_fail'):
     st.warning("일부 내용을 가져오지 못했어요. 샘플 데이터로 보완해 주세요.")
 
-# ── 본문: 메인(약 72%) + 오른쪽 도움말(약 28%) ──
-main_col, help_col = st.columns([2.6, 1], gap="medium")
+# ── 본문: 메인(약 70%) + 오른쪽 도움말(약 30%) ──
+main_col, help_col = st.columns([7, 3], gap="medium")
 
 with main_col:
     step = st.session_state.work_step
 
     # ================= 1단계: 자료 업로드 =================
     if step == 'UPLOAD':
-        render_upload_step()
+        with st.container(border=True):
+            render_upload_step()
 
     # ================= 2단계: 분석하기 =================
     elif step == 'ANALYZING':
-        render_analyzing_screen()
-        render_uploaded_files_card()
-        # 파일 업로드가 완료된 상태 → AI 분석 자동 시작 (기존 시스템 동일)
-        if st.session_state.get('is_analyzing'):
-            run_analysis()
-        elif st.session_state.analysis_data is None:
-            # 예시 데이터 등으로 바로 진입한 경우가 아니면 업로드 단계로 복귀
-            if not st.session_state.get('uploaded_meta'):
-                st.session_state.work_step = 'UPLOAD'
-                st.rerun()
+        with st.container(border=True):
+            render_analyzing_screen()
+            render_uploaded_files_card()
+            # 파일 업로드가 완료된 상태 → AI 분석 자동 시작 (기존 시스템 동일)
+            if st.session_state.get('is_analyzing'):
+                run_analysis()
+            elif st.session_state.analysis_data is None:
+                # 예시 데이터 등으로 바로 진입한 경우가 아니면 업로드 단계로 복귀
+                if not st.session_state.get('uploaded_meta'):
+                    st.session_state.work_step = 'UPLOAD'
+                    st.rerun()
 
     # ================= 3단계: 수정하기 =================
     elif step == 'EDITING':
