@@ -354,25 +354,33 @@ div[data-testid="stVerticalBlockBorderWrapper"] > div {
 .abp-help-secure p { margin: 0; }
 
 /* ===== 버튼 (Streamlit 버튼 오버라이드 - 연녹색 톤) =====
-   본문 주요 실행/생성 버튼: 전체폭 금지 → 텍스트 길이 + 좌우 padding(24px),
-   높이 54px 클릭 영역, 작업영역 안 가운데 정렬 */
-.stButton, .stDownloadButton {
+   본문 주요 실행/생성 버튼: 1.5배 확대 (높이 81px / padding 36px / 24px 폰트),
+   전체폭 금지 → 텍스트 길이에 맞는 가로폭, 작업영역 안 정확한 가운데 정렬,
+   초록 버튼 아이콘·텍스트는 흰색으로 선명하게 유지 */
+.stButton, .stDownloadButton,
+div[data-testid="stButton"], div[data-testid="stDownloadButton"] {
     display: flex !important;
     justify-content: center !important;
+    align-items: center !important;
+    width: 100% !important;
 }
 .stButton > button, .stDownloadButton > button {
     width: auto !important;
-    min-height: 54px !important;
-    padding: 0 24px !important;
-    font-size: 16px !important;
+    min-height: 81px !important;
+    padding: 0 36px !important;
+    font-size: 24px !important;
     font-weight: 800 !important;
     line-height: 1 !important;
+    letter-spacing: -0.3px;
     white-space: nowrap !important;
     display: inline-flex !important;
     align-items: center !important;
     justify-content: center !important;
-    border-radius: 10px !important;
+    gap: 8px !important;
+    border-radius: 14px !important;
     transition: all 0.2s ease !important;
+    text-shadow: none !important;
+    opacity: 1 !important;
 }
 .stButton > button[kind="primary"] {
     background: #1E6B3C !important;
@@ -380,8 +388,11 @@ div[data-testid="stVerticalBlockBorderWrapper"] > div {
     color: #FFFFFF !important;
     box-shadow: 0 2px 8px rgba(30, 107, 60, 0.25);
 }
-.stButton > button[kind="primary"]:hover {
+.stButton > button[kind="primary"]:hover,
+.stButton > button[kind="primary"]:active,
+.stButton > button[kind="primary"]:focus:not(:focus-visible) {
     background: #2E7D4F !important;
+    color: #FFFFFF !important;
     transform: translateY(-1px);
     box-shadow: 0 4px 12px rgba(30, 107, 60, 0.32);
 }
@@ -390,10 +401,47 @@ div[data-testid="stVerticalBlockBorderWrapper"] > div {
     border: 1px solid #D1D5DB !important;
     color: #374151 !important;
 }
-.stButton > button[kind="secondary"]:hover {
+.stButton > button[kind="secondary"]:hover,
+.stButton > button[kind="secondary"]:active {
     background: #F3F6F4 !important;
     border-color: #2E7D4F !important;
     color: #2E7D4F !important;
+}
+/* hover/active/disabled 공통: 텍스트 대비 유지 (흐려짐 방지) */
+.stButton > button:hover:not([disabled]),
+.stDownloadButton > button:hover:not([disabled]),
+.stButton > button:active:not([disabled]),
+.stDownloadButton > button:active:not([disabled]) {
+    opacity: 1 !important;
+    filter: none !important;
+}
+.stButton > button:disabled, .stDownloadButton > button:disabled {
+    cursor: not-allowed;
+    color: #9CA3AF !important;
+    background: #E5E7EB !important;
+    border: none !important;
+    box-shadow: none !important;
+    opacity: 1 !important;
+    filter: none !important;
+}
+/* 버튼 내부 텍스트/아이콘: 색상과 크기가 버튼 상태와 무관하게 유지되도록 */
+.stButton > button p, .stDownloadButton > button p,
+.stButton > button span, .stDownloadButton > button span {
+    color: inherit !important;
+    font-size: inherit !important;
+    font-weight: inherit !important;
+    margin: 0 !important;
+    line-height: 1 !important;
+}
+.stButton > button[kind="primary"] p,
+.stButton > button[kind="primary"] span,
+.stDownloadButton > button p,
+.stDownloadButton > button span {
+    color: #FFFFFF !important;
+}
+.stDownloadButton > button:hover p,
+.stDownloadButton > button:hover span {
+    color: #FFFFFF !important;
 }
 
 /* 파일 업로더: 단일 대형 카드 + 한글 선택 버튼 */
@@ -530,11 +578,15 @@ h1, h2, h3, h4, h5, h6 {
     gap: 0.5rem;
 }
 
-/* 다운로드 버튼: 공통 버튼 규칙 상속 + 기본 강조색만 지정 */
-.stDownloadButton > button {
+/* 다운로드 버튼: 공통 버튼 규칙 상속 + 흰색 텍스트 선명 유지 (PART1~4 포함) */
+.stDownloadButton > button,
+.stDownloadButton > button:hover,
+.stDownloadButton > button:active,
+.stDownloadButton > button:focus {
     background: #1E6B3C !important;
     color: #FFFFFF !important;
     border: none !important;
+    opacity: 1 !important;
 }
 
 .stDownloadButton > button:hover {
@@ -630,11 +682,12 @@ h1, h2, h3, h4, h5, h6 {
     .abp-file-grid { grid-template-columns: 1fr; }
     div[data-testid="stVerticalBlockBorderWrapper"] > div { padding: 20px 16px !important; }
     [data-testid="stFileUploaderDropzone"] { padding: 24px 16px !important; }
-    /* 모바일에서만 실행 버튼 폭 유연하게 확장 */
+    /* 모바일에서만 실행 버튼 폭 유연하게 확장 (1.5배 크기는 유지) */
     .stButton > button, .stDownloadButton > button {
         width: 100% !important;
-        padding: 0 18px !important;
-        font-size: 15px !important;
+        padding: 0 24px !important;
+        font-size: 20px !important;
+        min-height: 72px !important;
     }
 }
 </style>
