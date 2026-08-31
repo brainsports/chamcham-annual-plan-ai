@@ -2032,6 +2032,81 @@ def generate_part2_for_categories(compact_text: str, categories: list) -> dict:
         return None
 
 
+def revise_item_by_ai(item_name: str, current_content: str, user_request: str,
+                      item_kind: str = "text") -> str:
+    """
+    항목 단위 AI 수정: 선택한 항목의 내용만 수정한다.
+    - 전체 계획서를 재생성하지 않는다(항목명 + 현재 내용 + 사용자 요청만 전달).
+    - 반환값: 수정된 텍스트. 실패 시 ValueError를 던진다(기존 내용은 호출부에서 보존).
+    - item_kind: "text"(필드 텍스트) | "table_cell"(표 셀 단위 짧은 텍스트)
+    """
+    if not GEMINI_API_KEY:
+        raise ValueError("GEMINI_API_KEY가 설정되지 않았습니다.")
+
+    length_hint = ""
+    try:
+        cur_len = count_chars_no_space(current_content)
+        length_hint = f"\n- 현재 내용 공백 제외 글자수: {cur_len}자. 수정 결과도 이 글자수(±30%) 범위를 유지하세요."
+    except Exception:
+        pass
+
+    style_hint = ""
+    if item_kind == "table_cell":
+        style_hint = "\n- 표 셀에 들어가는 짧은 텍스트입니다. 불릿이 필요하면 • 를 사용하고 과도한 줄바꿈은 피하세요."
+    else:
+        style_hint = "\n- 기존 불릿(•/-) 형식이 있다면 형식을 유지하세요."
+
+    prompt = f"""당신은 연간사업계획서 전문가입니다. 아래의 선택된 항목 하나만 수정하세요.
+
+[선택 항목명]
+{item_name}
+
+[현재 내용]
+{current_content}
+
+[사용자 수정 요청]
+{user_request}
+
+[수정 규칙]
+- 선택한 항목의 내용만 수정하고, 다른 정보를 새로 만들어 추가하지 마세요.
+- 사용자 요청을 최대한 그대로 반영하세요.
+- 한국어, 행정 문서 스타일로 작성하세요.{length_hint}{style_hint}
+
+[출력 형식]
+반드시 아래 JSON 1개만 출력하세요:
+{{"revised": "수정된 항목 내용 전문"}}"""
+
+    system_instruction = ("당신은 연간사업계획서의 특정 항목만 수정하는 전문가입니다. "
+                          "출력은 반드시 JSON 객체 1개({\"revised\": \"...\"})만 포함하고, "
+                          "설명문·마크다운·코드블록은 절대 포함하지 않습니다.")
+
+    try:
+        result = safe_gemini_json(prompt, system_instruction=system_instruction,
+                                  max_retries=1, shorter_on_retry=False)
+        revised = str(result.get("revised", "")).strip()
+        if not revised:
+            raise ValueError("AI가 빈 결과를 반환했습니다.")
+        return revised
+    except ValueError:
+        # safe_gemini_json 실패 시 원문 그대로 반환된 JSON이 아닌 일반 텍스트 응답으로 1회 재시도
+        try:
+            model = genai.GenerativeModel(
+                model_name=GEMINI_MODEL,
+                generation_config=genai.GenerationConfig(
+                    temperature=0.4, max_output_tokens=4096)
+            )
+            response = model.generate_content(
+                "다음 항목을 수정하고, 설명 없이 수정된 본문 텍스트만 출력하세요.\n\n"
+                f"[항목명]\n{item_name}\n\n[현재 내용]\n{current_content}\n\n"
+                f"[수정 요청]\n{user_request}")
+            revised = (response.text or "").strip()
+            if revised:
+                return revised
+        except Exception as e:
+            print(f"[revise_item_by_ai] fallback error: {e}")
+        raise ValueError("AI 수정에 실패했습니다. 잠시 후 다시 시도해 주세요.")
+
+
 def parse_json_response(response_text: str) -> dict:
     """Parse JSON from Gemini response, removing markdown code blocks if present."""
     return _extract_json_from_text(response_text)

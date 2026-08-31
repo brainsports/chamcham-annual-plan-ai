@@ -48,7 +48,7 @@ from utils import (get_gemini_analysis, get_default_data, read_uploaded_file,
                    bucket_programs_by_month, apply_guidelines_to_analysis,
                    get_missing_categories, generate_part2_for_categories,
                    generate_part1, generate_part3, generate_part4,
-                   ensure_feedback_table_complete)
+                   ensure_feedback_table_complete, revise_item_by_ai)
 from doc_utils import (generate_part1_report, generate_part2_report,
                        generate_monthly_report,
                        generate_monthly_program_report,
@@ -540,6 +540,79 @@ h1, h2, h3, h4, h5, h6 {
 .stDownloadButton > button:hover {
     background: #2E7D4F !important;
 }
+
+/* ===== 항목별 AI 수정: 클릭 가능 항목 표시 + 모달 ===== */
+.abp-ai-editable {
+    position: relative;
+    border: 1.5px solid transparent;
+    border-radius: 10px;
+    padding: 8px 12px;
+    margin: 0 0 10px;
+    transition: border-color .15s ease, background .15s ease;
+    cursor: pointer;
+}
+.abp-ai-editable:hover {
+    border-color: #A7D3B4;
+    background: #F4FAF6;
+}
+.abp-ai-editable .abp-ai-hint {
+    position: absolute; top: 8px; right: 12px;
+    font-size: 12px; font-weight: 700; color: #2E7D4F;
+    background: #EAF4EC; border-radius: 999px; padding: 3px 10px;
+    opacity: 0; transition: opacity .15s ease; pointer-events: none;
+}
+.abp-ai-editable:hover .abp-ai-hint { opacity: 1; }
+.abp-ai-field-label {
+    font-size: 13px; font-weight: 800; color: #1F2937;
+    margin: 0 0 6px; display: flex; align-items: center; gap: 6px;
+}
+.abp-ai-field-label .abp-ai-chip {
+    font-size: 11px; color: #2E7D4F; background: #EAF4EC;
+    border-radius: 999px; padding: 2px 8px; font-weight: 700;
+}
+.abp-ai-field-current {
+    font-size: 13px; color: #4B5563; line-height: 1.6;
+    white-space: pre-wrap; word-break: keep-all;
+    max-height: 96px; overflow: hidden;
+    position: relative;
+}
+.abp-ai-field-current::after {
+    content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 34px;
+    background: linear-gradient(180deg, rgba(255,255,255,0), #F4FAF6 85%);
+}
+.abp-ai-editable:hover .abp-ai-field-current::after { display: block; }
+
+/* AI 수정 모달 컨테이너 */
+.abp-ai-modal {
+    background: #FFFFFF; border: 1px solid #D5E5D7; border-radius: 14px;
+    padding: 24px; box-shadow: 0 10px 36px rgba(31, 55, 40, 0.14);
+}
+.abp-ai-modal-title {
+    font-size: 18px; font-weight: 850; color: #1F2937; margin: 0 0 4px;
+    display: flex; align-items: center; gap: 8px;
+}
+.abp-ai-modal-item {
+    display: inline-block; font-size: 14px; font-weight: 800; color: #2E7D4F;
+    background: #EAF4EC; border-radius: 999px; padding: 5px 14px;
+    margin: 6px 0 14px;
+}
+.abp-ai-modal-label {
+    font-size: 13px; font-weight: 800; color: #374151;
+    margin: 14px 0 6px;
+}
+.abp-ai-modal-current {
+    background: #F7F8F7; border: 1px solid #E5E7EB; border-radius: 10px;
+    padding: 14px; font-size: 13px; color: #4B5563; line-height: 1.65;
+    white-space: pre-wrap; word-break: keep-all;
+    max-height: 180px; overflow-y: auto;
+}
+.abp-ai-modal-result {
+    background: #F2F9F4; border: 1px solid #CDE5D4; border-radius: 10px;
+    padding: 14px; font-size: 13px; color: #1F2937; line-height: 1.65;
+    white-space: pre-wrap; word-break: keep-all;
+    max-height: 220px; overflow-y: auto;
+}
+.abp-ai-modal-note { font-size: 12px; color: #9CA3AF; margin: 10px 0 0; }
 
 /* ===== 반응형 ===== */
 @media (max-width: 1024px) {
@@ -1058,10 +1131,162 @@ def render_sample_button():
 
 
 # ============================================================
+# 항목별 AI 수정: 클릭 대상 렌더러 + 전용 모달 (PART1~4 공통 사용)
+# ============================================================
+def render_ai_editable(item_key: str, label: str, current: str):
+    """클릭 가능한 항목 카드: 클릭 → AI 수정 모달 오픈 (기존 직접 수정과 병행)"""
+    shown = (current or "").strip()
+    if len(shown) > 300:
+        shown = shown[:300] + "…"
+    st.markdown(
+        f'<div class="abp-ai-editable" id="{item_key}">'
+        f'<span class="abp-ai-hint">✨ AI로 수정</span>'
+        f'<p class="abp-ai-field-label">{label}'
+        f'<span class="abp-ai-chip">✨ AI 수정 가능</span></p>'
+        f'<div class="abp-ai-field-current">{shown}</div></div>',
+        unsafe_allow_html=True)
+    if st.button("✨ AI로 수정", key=f"ai_edit_{item_key}", type="primary"):
+        st.session_state['ai_modal'] = {
+            'key': item_key, 'label': label,
+            'current': current or "",
+        }
+        st.session_state.pop('ai_modal_request', None)
+        st.session_state.pop('ai_modal_result', None)
+        st.rerun()
+
+
+def render_ai_modal():
+    """AI 수정 팝업 모달: 현재 내용 표시 → 수정 요청 → 결과 미리보기 → 적용/취소"""
+    modal = st.session_state.get('ai_modal')
+    if not modal:
+        return
+    key, label, current = modal['key'], modal['label'], modal['current']
+
+    st.markdown(
+        f'<div class="abp-ai-modal">'
+        f'<p class="abp-ai-modal-title">✨ AI로 내용 수정하기</p>'
+        f'<span class="abp-ai-modal-item">선택 항목: {label}</span>'
+        f'<p class="abp-ai-modal-label">현재 내용</p>'
+        f'<div class="abp-ai-modal-current">{current}</div></div>',
+        unsafe_allow_html=True)
+
+    request = st.text_area(
+        "AI에게 어떻게 수정할까요?",
+        value=st.session_state.get('ai_modal_request', ''),
+        placeholder="예: 내용을 조금 더 구체적으로 작성하고 중복 표현을 줄여줘",
+        height=110,
+        key="ai_modal_request_box")
+
+    loading = st.session_state.get('ai_modal_loading', False)
+    result = st.session_state.get('ai_modal_result')
+
+    # ── 중복 요청 방지: 로딩 중에는 요청 버튼 비활성 ──
+    req_disabled = loading or not (request or "").strip()
+    if st.button("AI 수정하기", type="primary", disabled=req_disabled,
+                 key="ai_modal_run"):
+        st.session_state['ai_modal_loading'] = True
+        st.session_state['ai_modal_result'] = None
+        try:
+            # 선택 항목 내용 + 항목명 + 사용자 요청만 전달 (전체 재생성 금지)
+            revised = revise_item_by_ai(
+                item_name=label, current_content=current,
+                user_request=request.strip())
+            st.session_state['ai_modal_result'] = revised
+        except Exception as e:
+            st.session_state['ai_modal_error'] = str(e)
+        finally:
+            st.session_state['ai_modal_loading'] = False
+            st.session_state['ai_modal_request'] = request
+        st.rerun()
+
+    if loading:
+        st.info("AI가 내용을 수정하고 있어요. 잠시만 기다려 주세요.")
+    if st.session_state.get('ai_modal_error'):
+        st.error(f"수정에 실패했어요: {st.session_state['ai_modal_error']} "
+                 f"기존 내용은 그대로 유지됩니다.")
+        st.session_state.pop('ai_modal_error', None)
+
+    applied = False
+    if result:
+        st.markdown(
+            f'<div class="abp-ai-modal-result">{result}</div>'
+            '<p class="abp-ai-modal-note">위 내용이 맞는지 확인한 뒤 적용하세요. '
+            '적용하기 전까지 기존 내용은 변경되지 않아요.</p>',
+            unsafe_allow_html=True)
+        c_cancel, c_apply = st.columns(2)
+        with c_apply:
+            if st.button("이 내용으로 적용", type="primary",
+                         key="ai_modal_apply"):
+                st.session_state['ai_modal_applied'] = {
+                    'key': key, 'value': result}
+                st.session_state.pop('ai_modal', None)
+                st.session_state.pop('ai_modal_result', None)
+                st.session_state.pop('ai_modal_request', None)
+                st.rerun()
+        with c_cancel:
+            pass
+    if st.button("취소", key="ai_modal_cancel"):
+        st.session_state.pop('ai_modal', None)
+        st.session_state.pop('ai_modal_result', None)
+        st.session_state.pop('ai_modal_request', None)
+        st.rerun()
+    return
+
+
+def consume_ai_apply(store: dict, field: str):
+    """모달의 '적용' 결과를 실제 데이터 필드에 반영 (항목 단위 업데이트)"""
+    applied = st.session_state.pop('ai_modal_applied', None)
+    if applied and applied['key'] == field:
+        store[field] = applied['value']
+        st.toast("선택한 항목에 AI 수정 내용을 적용했어요.", icon="✅")
+    return applied
+
+
+def render_table_ai_edit(store: dict, table_field: str, title: str,
+                         rows: list, name_field: str = 'program_name',
+                         scope: str = None):
+    """표 형태 항목의 행별 AI 수정 카드 (기대효과/계획내용/평가계획/사업내용 등).
+    - store[table_field]: list[dict] 형태의 기존 테이블 데이터
+    - rows: [(필드명, 표시명), ...] 수정 대상 셀 종류
+    - scope: 같은 table_field를 여러 영역에서 쓸 때 구분자 (예: PART2 영역명)
+    - 모달 '적용' 결과는 해당 행·해당 필드만 갱신한다.
+    """
+    table = store.get(table_field) or []
+    if not table:
+        return
+
+    key_prefix = f'tbl:{scope}:{table_field}' if scope else f'tbl:{table_field}'
+
+    # 모달 적용 결과 반영 (행 인덱스 + 필드 단위)
+    applied = st.session_state.pop('ai_modal_applied', None)
+    if applied and applied['key'].startswith(key_prefix + ':'):
+        try:
+            parts = applied['key'].split(':')
+            field = parts[-1]
+            row_idx = int(parts[-2])
+            if 0 <= row_idx < len(table) and field in table[row_idx]:
+                table[row_idx][field] = applied['value']
+                store[table_field] = table
+                st.toast("선택한 항목에 AI 수정 내용을 적용했어요.", icon="✅")
+        except (ValueError, KeyError, IndexError):
+            pass
+
+    for row_idx, row in enumerate(table[:30]):  # 표시는 앞 30행으로 제한
+        row_name = str(row.get(name_field, '') or f'{row_idx + 1}번')
+        for field, field_label in rows:
+            content = str(row.get(field, '') or '')
+            if not content.strip():
+                continue
+            render_ai_editable(
+                f'{key_prefix}:{row_idx}:{field}',
+                f'{title} · {row_name} - {field_label}', content)
+
+
+# ============================================================
 # 3단계: 수정하기 (기존 PART1~4 편집 로직 유지)
 # ============================================================
 def render_editing_step():
-    """AI가 생성한 내용 확인/수정 (기존 편집 기능 그대로)"""
+    """AI가 생성한 내용을 확인하고 직접 수정 (기존 편집 기능 그대로)"""
     data = st.session_state.analysis_data
 
     if 'part1_general' not in data:
@@ -1189,6 +1414,9 @@ def render_editing_step():
             '<span>5개 영역 모두 분석 완료</span></div>',
             unsafe_allow_html=True)
 
+    # 항목별 AI 수정 모달 (열려 있을 때 최상단에 표시)
+    render_ai_modal()
+
     # 중앙 칼럼 내 탭 (기존 PART 1~4 편집 UI 그대로)
     tab1, tab2, tab3, tab4 = st.tabs([
         "PART 1: 총괄/기획", "PART 2: 세부사업", "PART 3: 상반기(1~6월)",
@@ -1217,6 +1445,9 @@ def render_editing_step():
 
         with st.expander("1. 사업의 필요성", expanded=True):
             st.subheader("1) 이용아동의 욕구 및 문제점")
+            consume_ai_apply(data['part1_general'], 'need_1_user_desire')
+            render_ai_editable('need_1_user_desire', '1) 이용아동의 욕구 및 문제점',
+                               part1.get('need_1_user_desire', ''))
             need_1 = st.text_area("1) 이용아동의 욕구 및 문제점 (상세 서술)",
                                   value=part1.get('need_1_user_desire',
                                                   ''),
@@ -1227,6 +1458,9 @@ def render_editing_step():
 
             st.subheader("2) 지역 환경적 특성")
 
+            consume_ai_apply(data['part1_general'], 'need_2_1_regional')
+            render_ai_editable('need_2_1_regional', '(1) 지역적 특성',
+                               part1.get('need_2_1_regional', ''))
             need_2_1 = st.text_area("(1) 지역적 특성 (상세 서술)",
                                     value=part1.get(
                                         'need_2_1_regional', ''),
@@ -1235,6 +1469,9 @@ def render_editing_step():
             show_char_count(need_2_1, 'need_2_1_regional', p1_rules)
             data['part1_general']['need_2_1_regional'] = need_2_1
 
+            consume_ai_apply(data['part1_general'], 'need_2_2_environment')
+            render_ai_editable('need_2_2_environment', '(2) 주변환경',
+                               part1.get('need_2_2_environment', ''))
             need_2_2 = st.text_area("(2) 주변환경 (상세 서술)",
                                     value=part1.get(
                                         'need_2_2_environment', ''),
@@ -1243,6 +1480,9 @@ def render_editing_step():
             show_char_count(need_2_2, 'need_2_2_environment', p1_rules)
             data['part1_general']['need_2_2_environment'] = need_2_2
 
+            consume_ai_apply(data['part1_general'], 'need_2_3_educational')
+            render_ai_editable('need_2_3_educational', '(3) 교육적 특성',
+                               part1.get('need_2_3_educational', ''))
             need_2_3 = st.text_area("(3) 교육적 특성 (상세 서술)",
                                     value=part1.get(
                                         'need_2_3_educational', ''),
@@ -1306,6 +1546,14 @@ def render_editing_step():
                             '개선방안': 'improvement'
                         }).to_dict('records')
 
+            # 환류계획 행별 AI 수정 (문제점/개선방안)
+            render_table_ai_edit(
+                store=data['part1_general'],
+                table_field='feedback_table',
+                title='차년도 사업 환류 계획',
+                rows=[('problem', '문제점'), ('improvement', '개선방안')],
+                name_field='area')
+
             st.subheader("2) 총평")
             total_review_data = part1.get('total_review_table', [])
             total_review_df = pd.DataFrame(
@@ -1359,6 +1607,14 @@ def render_editing_step():
                             '영역': 'category',
                             '내용': 'content'
                         }).to_dict('records')
+
+        # 총평 행별 AI 수정
+        render_table_ai_edit(
+            store=data['part1_general'],
+            table_field='total_review_table',
+            title='전년도 사업평가 총평',
+            rows=[('content', '내용')],
+            name_field='category')
 
         with st.expander("3. 만족도조사", expanded=True):
             satisfaction_survey = part1.get('satisfaction_survey', {})
@@ -1506,6 +1762,12 @@ def render_editing_step():
                 data['part1_general']['satisfaction_survey'][
                     'subjective_question'] = subjective_q
 
+                consume_ai_apply(data['part1_general']['satisfaction_survey'],
+                                 'subjective_analysis')
+                render_ai_editable(
+                    'satisfaction_survey.subjective_analysis',
+                    '주관식 문항 요약 및 분석',
+                    satisfaction_survey.get('subjective_analysis', ''))
                 subjective_analysis = st.text_area(
                     "주관식 문항 요약 및 분석 (500자 이상)",
                     value=satisfaction_survey.get('subjective_analysis',
@@ -1518,6 +1780,12 @@ def render_editing_step():
                 st.markdown("---")
 
                 st.subheader("종합 분석 및 제언")
+                consume_ai_apply(data['part1_general']['satisfaction_survey'],
+                                 'overall_suggestion')
+                render_ai_editable(
+                    'satisfaction_survey.overall_suggestion',
+                    '종합 분석 및 제언',
+                    satisfaction_survey.get('overall_suggestion', ''))
                 overall_suggestion = st.text_area(
                     "종합 분석 및 제언 (500자 이상)",
                     value=satisfaction_survey.get('overall_suggestion',
@@ -1538,6 +1806,9 @@ def render_editing_step():
                     }
 
         with st.expander("4. 사업목적", expanded=True):
+            consume_ai_apply(data['part1_general'], 'purpose_text')
+            render_ai_editable('purpose_text', '사업목적',
+                               part1.get('purpose_text', ''))
             purpose = st.text_area("사업목적을 작성하세요",
                                    value=part1.get('purpose_text', ''),
                                    height=150,
@@ -1546,6 +1817,9 @@ def render_editing_step():
             data['part1_general']['purpose_text'] = purpose
 
         with st.expander("5. 사업목표", expanded=True):
+            consume_ai_apply(data['part1_general'], 'goals_text')
+            render_ai_editable('goals_text', '사업목표',
+                               part1.get('goals_text', ''))
             goals = st.text_area("사업목표를 작성하세요",
                                  value=part1.get('goals_text', ''),
                                  height=150,
@@ -1656,6 +1930,18 @@ def render_editing_step():
                         '계획내용': 'content'
                     }).to_dict('records')
 
+        # 세부사업 행별 AI 수정 (기대효과/계획내용)
+        render_table_ai_edit(
+            store=data['part2_programs'][selected_category],
+            table_field='detail_table',
+            scope=selected_category,
+            title=f'{selected_category} 세부사업내용',
+            rows=[
+                ('expected_effect', '기대효과'),
+                ('content', '계획내용'),
+            ],
+            name_field='program_name')
+
         st.subheader(f"📊 {selected_category} - 평가계획")
 
         eval_data = category_data.get('eval_table', [])
@@ -1739,6 +2025,18 @@ def render_editing_step():
                         '평가방법': 'eval_method'
                     }).to_dict('records')
 
+        # 평가계획 행별 AI 수정 (평가계획/평가방법)
+        render_table_ai_edit(
+            store=data['part2_programs'][selected_category],
+            table_field='eval_table',
+            scope=selected_category,
+            title=f'{selected_category} 평가계획',
+            rows=[
+                ('main_plan', '평가계획'),
+                ('eval_method', '평가방법'),
+            ],
+            name_field='program_name')
+
         # [3단계] PART별 다운로드 버튼은 노출하지 않는다 (4단계에서만 노출)
 
     with tab3:
@@ -1815,6 +2113,15 @@ def render_editing_step():
                         '수행인력': 'staff',
                         '사업내용': 'content'
                     }).to_dict('records')
+
+            # 월별 사업내용 행별 AI 수정
+            render_table_ai_edit(
+                store=data['part3_monthly_plan'],
+                table_field=month,
+                scope='p3',
+                title=f'{month} 사업계획',
+                rows=[('content', '사업내용')],
+                name_field='program_name')
 
             st.markdown("---")
 
@@ -1894,6 +2201,15 @@ def render_editing_step():
                         '수행인력': 'staff',
                         '사업내용': 'content'
                     }).to_dict('records')
+
+            # 월별 사업내용 행별 AI 수정
+            render_table_ai_edit(
+                store=data['part4_monthly_plan'],
+                table_field=month,
+                scope='p4',
+                title=f'{month} 사업계획',
+                rows=[('content', '사업내용')],
+                name_field='program_name')
 
             st.markdown("---")
 
