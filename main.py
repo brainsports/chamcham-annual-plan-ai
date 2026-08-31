@@ -42,6 +42,7 @@ from doc_utils import (generate_part1_report, generate_part2_report,
                        generate_monthly_report,
                        generate_monthly_program_report,
                        generate_part4_full_report, generate_full_report)
+from landing_page import render_landing
 
 matplotlib.rcParams['font.family'] = 'DejaVu Sans'
 matplotlib.rcParams['axes.unicode_minus'] = False
@@ -319,6 +320,10 @@ if 'month_bucket' not in st.session_state:
 if 'is_analyzing' not in st.session_state:
     st.session_state.is_analyzing = False
 
+# 랜딩 페이지 상태 (새로고침 시 기본값 True → 랜딩부터 시작)
+if 'show_landing' not in st.session_state:
+    st.session_state.show_landing = True
+
 MAX_FILES = 30
 MAX_TOTAL_SIZE_MB = 200
 
@@ -420,8 +425,37 @@ def render_sample_button():
 # 메인 3단 레이아웃 (No Sidebar)
 # ============================================================
 
+# ============================================================
+# [랜딩 페이지] 최초 접속 시 랜딩 화면 표시 → 버튼으로 기존 화면 진입
+# - "start": 기존 파일 업로드 화면으로 진입 (기존 기능 그대로)
+# - "example": 기존 예시 데이터 로드 흐름으로 진입
+# ============================================================
+if st.session_state.get('show_landing', True):
+    action = render_landing()
+    if action == "start":
+        st.session_state.show_landing = False
+        st.rerun()
+    elif action == "example":
+        st.session_state.show_landing = False
+        # 기존 render_sample_button() 과 동일한 예시 데이터 로드 흐름
+        raw_data = get_default_data()
+        rules = load_guideline_rules()
+        adjusted_data, adjustment_logs = apply_guidelines_to_analysis(
+            raw_data, rules)
+        st.session_state.analysis_data = adjusted_data
+        st.session_state.guideline_rules = rules
+        for log in adjustment_logs:
+            logger.info(log)
+        st.rerun()
+    st.stop()
+
 # 첫 화면 (데이터 없을 때)
 if st.session_state.analysis_data is None:
+    # [홈으로] 랜딩 페이지로 돌아가기 (분석 데이터는 유지)
+    if st.button("🏠 홈으로", key="abp_btn_home"):
+        st.session_state.show_landing = True
+        st.rerun()
+
     # 3단 레이아웃: 왼쪽(20%) - 중앙(60%) - 오른쪽(20%)
     left_col, center_col, right_col = st.columns([1, 3, 1])
 
