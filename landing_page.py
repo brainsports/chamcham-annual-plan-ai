@@ -31,32 +31,41 @@ LANDING_STYLE = """
 }
 .main .block-container {
     background: transparent !important;
-    max-width: 1400px !important;
+    max-width: 1080px !important;
     border: none !important;
     box-shadow: none !important;
     padding-top: 1.2rem !important;
+    padding-left: 2rem !important;
+    padding-right: 2rem !important;
 }
 #abp-landing { font-family: 'NanumGothic', 'Nanum Gothic', sans-serif; }
 #abp-landing * { box-sizing: border-box; }
 
-/* 히어로 원본 이미지: 콘텐츠 폭에 맞추고 종횡비 유지 (왜곡/크롭 금지) */
+/* 히어로 원본 이미지: 최대폭 축소·중앙 정렬, 종횡비 유지 (왜곡/크롭 금지) */
+[data-testid="stImageContainer"] {
+    display: flex !important;
+    justify-content: center !important;
+}
 [data-testid="stImageContainer"] img {
-    width: 100% !important;
+    width: min(760px, 100%) !important;
     height: auto !important;
     object-fit: contain !important;
 }
 
 /* ---------------- 이렇게 진행돼요! 패널 ---------------- */
-.abp-process-row { display: flex; justify-content: center; align-items: stretch; gap: 28px; margin-top: 36px; }
+.abp-process-row {
+    display: flex; justify-content: center; align-items: stretch;
+    gap: 32px; margin-top: 40px;
+}
 .abp-process-panel {
-    position: relative; width: 1020px; max-width: 100%;
+    position: relative; flex: 1 1 auto; min-width: 0;
     background: #FDFBF3; border: 2.5px dashed #3A3A3A; border-radius: 20px;
-    padding: 52px 44px 40px;
+    padding: 54px 40px 42px;
 }
 .abp-process-ribbon {
     position: absolute; top: -22px; left: 50%; transform: translateX(-50%);
     background: #FBE88A; border: 2.5px solid #3A3A3A; border-radius: 8px;
-    padding: 9px 34px; font-size: 20px; font-weight: 800; color: #3A3A3A; white-space: nowrap;
+    padding: 9px 34px; font-size: 21px; font-weight: 800; color: #3A3A3A; white-space: nowrap;
 }
 .abp-process-ribbon::before, .abp-process-ribbon::after {
     content: ""; position: absolute; top: 5px; width: 22px; height: 30px;
@@ -65,98 +74,106 @@ LANDING_STYLE = """
 .abp-process-ribbon::before { left: -18px; clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%, 40% 50%); }
 .abp-process-ribbon::after { right: -18px; clip-path: polygon(0 0, 100% 0, 60% 50%, 100% 100%, 0 100%); }
 
-.abp-steps { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.abp-steps { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
 .abp-step { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; text-align: center; }
-.abp-step-icon { position: relative; width: 86px; height: 86px; display: flex; align-items: center; justify-content: center; }
-.abp-step-icon svg { width: 86px; height: 86px; }
+.abp-step-icon { position: relative; width: 88px; height: 88px; display: flex; align-items: center; justify-content: center; }
+.abp-step-icon svg { width: 88px; height: 88px; }
 .abp-step-badge {
-    position: absolute; top: -8px; left: -10px; width: 34px; height: 34px;
+    position: absolute; top: -8px; left: -10px; width: 36px; height: 36px;
     border-radius: 50%; border: 2.5px solid #3A3A3A; color: #FFFFFF;
-    font-size: 15px; font-weight: 800; display: flex; align-items: center;
+    font-size: 16px; font-weight: 800; display: flex; align-items: center;
     justify-content: center; z-index: 1;
 }
-.abp-step-title { margin: 14px 0 0; font-size: 22px; font-weight: 800; color: #3A3A3A; }
-.abp-step-desc { margin: 6px 0 0; font-size: 15px; line-height: 1.45; color: #6B6B6B; word-break: keep-all; }
-.abp-arrow { flex-shrink: 0; align-self: center; margin-top: 30px; font-size: 30px; color: #9A9A9A; line-height: 1; }
+.abp-step-title { margin: 16px 0 0; font-size: 23px; font-weight: 800; color: #3A3A3A; }
+.abp-step-desc { margin: 8px 0 0; font-size: 16px; line-height: 1.5; color: #6B6B6B; word-break: keep-all; }
+.abp-arrow { flex-shrink: 0; align-self: center; margin-top: 32px; font-size: 30px; color: #9A9A9A; line-height: 1; }
 
 /* ---------------- 준비 자료 박스 ---------------- */
 .abp-materials {
-    position: relative; width: 250px; flex-shrink: 0;
+    position: relative; width: 252px; flex-shrink: 0;
+    display: flex; flex-direction: column; justify-content: center;
     background: #EAF4E2; border: 2.5px solid #3A3A3A; border-radius: 16px;
-    padding: 40px 22px 26px; text-align: center;
+    padding: 44px 24px 30px; text-align: center;
 }
 .abp-materials-tab {
     position: absolute; top: -18px; left: 50%; transform: translateX(-50%);
     background: #A5CF8D; border: 2.5px solid #3A3A3A; border-radius: 9999px;
-    padding: 7px 26px; font-size: 18px; font-weight: 800; color: #FFFFFF; white-space: nowrap;
+    padding: 7px 26px; font-size: 19px; font-weight: 800; color: #FFFFFF; white-space: nowrap;
 }
-.abp-materials-icon { width: 88px; margin: 4px auto 0; display: block; }
-.abp-materials-title { margin: 10px 0 0; font-size: 21px; font-weight: 800; color: #3A3A3A; }
-.abp-materials-desc { margin: 8px 0 0; font-size: 14px; line-height: 1.5; font-weight: 600; color: #4F6B41; word-break: keep-all; }
+.abp-materials-icon { width: 92px; margin: 4px auto 0; display: block; }
+.abp-materials-title { margin: 12px 0 0; font-size: 22px; font-weight: 800; color: #3A3A3A; }
+.abp-materials-desc { margin: 10px 0 0; font-size: 15px; line-height: 1.55; font-weight: 600; color: #4F6B41; word-break: keep-all; }
 
 /* ---------------- 하단 버튼 (실제 st.button) ---------------- */
 .abp-btn-anchor { height: 0; }
 .abp-btn-anchor ~ div[data-testid="stHorizontalBlock"] {
-    display: flex; justify-content: center; align-items: stretch; gap: 56px;
-    margin-top: 44px;
+    display: flex; justify-content: center; align-items: stretch; gap: 48px;
+    margin-top: 48px;
 }
+.abp-btn-anchor ~ div[data-testid="stHorizontalBlock"] > div { flex: 1 1 0; }
 .abp-btn-anchor ~ div[data-testid="stHorizontalBlock"] button {
     display: flex; flex-direction: column; align-items: center; justify-content: center;
-    gap: 2px; border-radius: 16px; cursor: pointer;
+    gap: 3px; border-radius: 16px; cursor: pointer; width: 100%;
     font-family: 'NanumGothic', 'Nanum Gothic', sans-serif;
     transition: transform .15s ease;
-    height: auto; min-height: 96px;
+    height: auto; min-height: 104px;
 }
 .abp-btn-anchor ~ div[data-testid="stHorizontalBlock"] button:hover { transform: translateY(-2px); }
 .abp-btn-anchor ~ div[data-testid="stHorizontalBlock"] > div:first-child button {
     background: #2BB8B8; border: 3px solid #3A3A3A;
     box-shadow: 0 6px 0 rgba(58,58,58,.25);
     color: #FFFFFF; font-size: 26px; font-weight: 800;
-    padding: 14px 30px;
+    padding: 16px 30px;
 }
 .abp-btn-anchor ~ div[data-testid="stHorizontalBlock"] > div:first-child button:hover {
     background: #2CC4C4; border: 3px solid #3A3A3A; color: #FFFFFF;
 }
 .abp-btn-anchor ~ div[data-testid="stHorizontalBlock"] > div:first-child button::after {
-    content: "지금 바로 시작해요!"; display: block; font-size: 15px; font-weight: 600;
-    color: rgba(255,255,255,.92); margin-top: 2px;
+    content: "지금 바로 시작해요!"; display: block; font-size: 16px; font-weight: 600;
+    color: rgba(255,255,255,.92); margin-top: 3px;
 }
 .abp-btn-anchor ~ div[data-testid="stHorizontalBlock"] > div:last-child button {
     background: #FFFFFF; border: 3px solid #3A3A3A;
     box-shadow: 0 6px 0 rgba(58,58,58,.15);
-    color: #3A3A3A; font-size: 23px; font-weight: 800;
-    padding: 11px 26px;
+    color: #3A3A3A; font-size: 25px; font-weight: 800;
+    padding: 16px 30px;
 }
 .abp-btn-anchor ~ div[data-testid="stHorizontalBlock"] > div:last-child button:hover {
     background: #FFFFFF; border: 3px solid #3A3A3A; color: #3A3A3A;
 }
 .abp-btn-anchor ~ div[data-testid="stHorizontalBlock"] > div:last-child button::after {
-    content: "작성 예시를 확인해보세요."; display: block; font-size: 14px; font-weight: 600;
-    color: #6B6B6B; margin-top: 2px;
+    content: "작성 예시를 확인해보세요."; display: block; font-size: 15px; font-weight: 600;
+    color: #6B6B6B; margin-top: 3px;
 }
 
 /* ---------------- 하단 안내 문구 ---------------- */
 .abp-notice {
-    margin-top: 30px; text-align: center; font-size: 17px; font-weight: 700;
+    margin-top: 36px; text-align: center; font-size: 18px; font-weight: 700;
     color: #4A4A4A; word-break: keep-all;
 }
 
 /* ---------------- 반응형 (PC 우선, 모바일 종횡비 유지) ---------------- */
 @media (max-width: 1280px) {
-    .abp-process-panel { padding: 48px 28px 34px; }
+    [data-testid="stImageContainer"] img { width: min(700px, 100%) !important; }
+    .abp-process-panel { padding: 50px 30px 36px; }
 }
 @media (max-width: 1024px) {
-    .abp-process-row { flex-direction: column; align-items: center; gap: 40px; }
+    [data-testid="stImageContainer"] img { width: min(620px, 100%) !important; }
+    .abp-process-row { flex-direction: column; align-items: center; gap: 44px; }
     .abp-process-panel { width: 100%; }
-    .abp-steps { flex-wrap: wrap; gap: 20px 12px; }
+    .abp-steps { flex-wrap: wrap; gap: 24px 14px; }
     .abp-step { flex: 1 1 40%; }
     .abp-arrow { display: none; }
-    .abp-materials { width: 100%; max-width: 430px; }
+    .abp-materials { width: 100%; max-width: 460px; }
+    .abp-btn-anchor ~ div[data-testid="stHorizontalBlock"] { flex-direction: column; align-items: center; gap: 20px; }
+    .abp-btn-anchor ~ div[data-testid="stHorizontalBlock"] > div { flex: 0 0 auto; width: 100%; max-width: 460px; }
 }
 @media (max-width: 640px) {
     .abp-process-ribbon { padding: 8px 20px; font-size: 17px; }
-    .abp-process-panel { padding: 42px 16px 28px; }
+    .abp-process-panel { padding: 44px 18px 30px; }
     .abp-step { flex: 1 1 100%; }
+    .abp-step-title { font-size: 20px; }
+    .abp-step-desc { font-size: 15px; }
     .abp-notice { font-size: 15px; }
 }
 </style>
@@ -232,7 +249,7 @@ def render_landing():
 
     # 실제 클릭 가능한 버튼 (CSS 로 레퍼런스 스타일 적용)
     st.markdown('<div class="abp-btn-anchor"></div>', unsafe_allow_html=True)
-    start_col, example_col = st.columns([1.2, 1], gap="large")
+    start_col, example_col = st.columns([1, 1], gap="medium")
 
     action = None
     with start_col:
