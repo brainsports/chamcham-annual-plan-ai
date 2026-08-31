@@ -356,9 +356,16 @@ div[data-testid="stVerticalBlockBorderWrapper"] > div {
 /* ===== 버튼 (Streamlit 버튼 오버라이드 - 연녹색 톤) =====
    본문 주요 실행/생성 버튼: 1.5배 확대 (높이 81px / padding 36px / 24px 폰트),
    전체폭 금지 → 텍스트 길이에 맞는 가로폭, 작업영역 안 정확한 가운데 정렬,
-   초록 버튼 아이콘·텍스트는 흰색으로 선명하게 유지 */
+   초록 버튼 아이콘·텍스트는 흰색으로 선명하게 유지.
+   [핵심] 상위 stElementContainer가 버튼 폭만큼만 좁아져 좌측 정렬처럼 보이는
+   문제를 해결: 컨테이너 → 버튼 래퍼 순으로 전체폭 + flex 중앙 정렬을 적용한다 */
+[data-testid="stElementContainer"]:has([data-testid="stButton"]),
+[data-testid="stElementContainer"]:has([data-testid="stDownloadButton"]) {
+    width: 100% !important;
+    display: block !important;
+}
 .stButton, .stDownloadButton,
-div[data-testid="stButton"], div[data-testid="stDownloadButton"] {
+[data-testid="stButton"], [data-testid="stDownloadButton"] {
     display: flex !important;
     justify-content: center !important;
     align-items: center !important;
